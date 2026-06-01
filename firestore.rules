@@ -1,0 +1,35 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /rooms/{roomId} {
+      // 誰でも読める（観戦・入室確認のため）
+      allow read: if true;
+
+      // ルーム作成: statusがwaitingで基本フィールドが揃っていること
+      allow create: if
+        request.resource.data.status == 'waiting' &&
+        request.resource.data.roomId  == roomId   &&
+        request.resource.data.playerOrder is list  &&
+        request.resource.data.playerOrder.size() >= 1 &&
+        request.resource.data.playerOrder.size() <= 4;
+
+      // ルーム更新: 存在するルームへの書き込みのみ
+      allow update: if
+        resource != null &&
+        // プレイヤー数は最大4人まで
+        (
+          !('playerOrder' in request.resource.data) ||
+          request.resource.data.playerOrder.size() <= 4
+        ) &&
+        // statusは決められた値のみ
+        (
+          !('status' in request.resource.data) ||
+          request.resource.data.status in ['waiting', 'playing', 'finished']
+        );
+
+      // 削除は禁止（ゲーム履歴保護）
+      allow delete: if false;
+    }
+  }
+}

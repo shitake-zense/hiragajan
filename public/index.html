@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>ひらがじゃん</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div class="lobby-container">
+
+    <header class="lobby-header">
+      <span class="logo">🀄</span>
+      <h1 class="title">ひらがじゃん</h1>
+      <p class="subtitle">ひらがなで遊ぶ麻雀風単語ゲーム</p>
+    </header>
+
+    <!-- 名前入力 -->
+    <section class="card">
+      <label class="label" for="playerName">あなたの名前</label>
+      <input type="text" id="playerName" class="input"
+        placeholder="名前を入力（最大10文字）" maxlength="10" autocomplete="off">
+    </section>
+
+    <!-- ルーム作成 -->
+    <section class="card">
+      <h2 class="card-title">新しいルームを作る</h2>
+      <p class="card-desc">ルームを作成してIDを相手に教えてください</p>
+
+      <label class="label">対戦人数</label>
+      <div class="player-count-select" id="playerCountSelect">
+        <button class="count-btn count-btn-active" data-count="2">2人</button>
+        <button class="count-btn" data-count="3">3人</button>
+        <button class="count-btn" data-count="4">4人</button>
+      </div>
+
+      <label class="label">ラウンド数</label>
+      <div class="player-count-select" id="roundCountSelect">
+        <button class="count-btn count-btn-active" data-round="1">1回</button>
+        <button class="count-btn" data-round="3">3回</button>
+        <button class="count-btn" data-round="5">5回</button>
+      </div>
+
+      <button id="createRoomBtn" class="btn btn-primary">ルームを作成する</button>
+    </section>
+
+    <!-- ルーム参加 -->
+    <section class="card">
+      <h2 class="card-title">ルームに参加する</h2>
+      <p class="card-desc">相手からルームIDを教えてもらって入力してください</p>
+      <input type="text" id="roomIdInput" class="input"
+        placeholder="6桁のルームIDを入力" maxlength="6" inputmode="numeric" autocomplete="off">
+      <button id="joinRoomBtn" class="btn btn-secondary">参加する</button>
+    </section>
+
+    <div id="errorMsg" class="error-msg hidden"></div>
+
+    <section class="card" style="text-align:center;">
+      <button id="lobbyRulesBtn" class="btn btn-ghost">ルール・役一覧・点数表を見る</button>
+    </section>
+
+  </div>
+
+  <!-- ルールモーダル -->
+  <div id="lobbyRulesModal" class="modal-overlay hidden">
+    <div class="modal-card rules-modal-card">
+
+      <div class="rules-modal-header">
+        <h2 class="rules-title">ひらがじゃん ルール</h2>
+        <button id="lobbyRulesCloseBtn" class="btn-rules-close">✕</button>
+      </div>
+
+      <div class="rules-tabs">
+        <button class="rules-tab rules-tab-active" data-tab="lbasic">基本ルール</button>
+        <button class="rules-tab" data-tab="lroles">役一覧</button>
+        <button class="rules-tab" data-tab="lscore">点数表</button>
+        <button class="rules-tab" data-tab="ldora">ドラ・風</button>
+      </div>
+
+      <div id="tab-lbasic" class="rules-content">
+        <div class="rules-section">
+          <div class="rules-section-title">ゲームの目的</div>
+          <p class="rules-text">14枚のひらがな牌を使って、2文字×1組・3文字×4組の合計5組の単語を作ってあがる。</p>
+        </div>
+        <div class="rules-section">
+          <div class="rules-section-title">ターンの流れ</div>
+          <ol class="rules-list">
+            <li>山札から牌を1枚引く（13→14枚）</li>
+            <li>手牌で単語が5組揃えば「あがり宣言」できる</li>
+            <li>揃わなければ不要な牌を1枚捨てる</li>
+            <li>次のプレイヤーへ</li>
+          </ol>
+        </div>
+        <div class="rules-section">
+          <div class="rules-section-title">ポン</div>
+          <ul class="rules-list">
+            <li>相手が捨てた牌を使って3文字の単語を作れる</li>
+            <li>捨てた直後、次の順番のプレイヤーのみ可能</li>
+            <li>ポン後は単語を公開してから1枚捨てる</li>
+          </ul>
+        </div>
+        <div class="rules-section">
+          <div class="rules-section-title">カン</div>
+          <ul class="rules-list">
+            <li>手牌の牌で4文字以上の単語を作ると宣言できる</li>
+            <li>文字数−3枚の牌を追加で引ける</li>
+          </ul>
+        </div>
+        <div class="rules-section">
+          <div class="rules-section-title">風（かぜ）</div>
+          <p class="rules-text">ゲーム開始時にランダムで場風と各プレイヤーの自風が設定されます（あ風・い風・う風・え風・お風）。</p>
+        </div>
+        <div class="rules-section">
+          <div class="rules-section-title">ドラ</div>
+          <ul class="rules-list">
+            <li>「あいうえお」は常にドラ扱い（ポン/カン時+200点・あがり時+500点）</li>
+            <li>場風の段からランダム2種もドラになる</li>
+          </ul>
+        </div>
+        <div class="rules-section">
+          <div class="rules-section-title">立直</div>
+          <ul class="rules-list">
+            <li>あと1枚で5組が揃う状態で宣言できる</li>
+            <li>ポン・カン後は宣言不可</li>
+          </ul>
+        </div>
+      </div>
+
+      <div id="tab-lroles" class="rules-content hidden">
+        <div class="role-card"><div class="role-card-name">対々和（トイトイ）</div><div class="role-card-desc">ポン・カンで確定した組が4組ある状態であがる。門前自摸と同時成立しない。</div><div class="role-card-sub">+800点</div></div>
+        <div class="role-card"><div class="role-card-name">門前自摸（メンゼンツモ）</div><div class="role-card-desc">ポン・カンを一度も使わずにツモあがりすると成立。</div><div class="role-card-sub">+400点</div></div>
+        <div class="role-card"><div class="role-card-name">一発（イッパツ）</div><div class="role-card-desc">リーチ後、鳴きのない1巡以内にツモまたはロンであがると成立。</div><div class="role-card-sub">+800点</div></div>
+        <div class="role-card"><div class="role-card-name">立直（リーチ）</div><div class="role-card-desc">あと1組でそろう状態で宣言。宣言後はツモかロンであがる。</div><div class="role-card-sub">+800点</div></div>
+        <div class="role-card"><div class="role-card-name">七対子（チートイツ）</div><div class="role-card-desc">7組すべてが2文字の単語で構成される。</div><div class="role-card-sub">+500点</div><div class="role-card-note">★七対子時の複合役制限：母音染・混濁母・混拗長・母音流は5組以上で成立、断濁母は無効。</div></div>
+        <div class="role-card"><div class="role-card-name">母音染（ムーインラン）</div><div class="role-card-desc">母音が統一された単語が3組以上ある（ん・ーを除く）。</div><div class="role-card-sub">3組：+500点　4組：+1000点　5組：+1500点</div></div>
+        <div class="role-card"><div class="role-card-name">混濁母（フンヂュオムー）</div><div class="role-card-desc">濁音または半濁音を含む組が3つ以上ある。</div><div class="role-card-sub">3組：+500点　4組：+1000点　5組：+1500点</div></div>
+        <div class="role-card"><div class="role-card-name">断濁母（タンヂュオムー）</div><div class="role-card-desc">全組の全文字に「あ行・濁音・半濁音」が一切含まれない。七対子時は無効。</div><div class="role-card-sub">+1200点</div></div>
+        <div class="role-card"><div class="role-card-name">頭連単（トウリィェンダン）</div><div class="role-card-desc">各組の頭文字が同じ行で、その母音が3つ以上連続している。</div><div class="role-card-sub">3組：+800点　4組：+1800点　5組：+4000点</div></div>
+        <div class="role-card"><div class="role-card-name">混拗長（フンアオチャン）</div><div class="role-card-desc">拗音または長音を含む組が3つ以上ある。</div><div class="role-card-sub">3組：+500点　4組：+1000点　5組：+1800点</div></div>
+        <div class="role-card"><div class="role-card-name">同単嬉々（トンダンシー）</div><div class="role-card-desc">全く同じ単語が2組以上ある状態であがる。</div><div class="role-card-sub">+1500点</div></div>
+        <div class="role-card"><div class="role-card-name">同字入（トンズールー）</div><div class="role-card-desc">同じ文字が複数使われる単語が2種以上ある。</div><div class="role-card-sub">2種：+600点　3種：+1200点　4種：+2000点　5種：+3000点</div></div>
+        <div class="role-card"><div class="role-card-name">場風乱舞（チャンフォンルゥァンウー）</div><div class="role-card-desc">場風と同じ段の牌が7枚以上含まれる（共鳴風成立時は無効）。</div><div class="role-card-sub">7枚：+800点　9枚：+1500点　11枚：+2500点</div></div>
+        <div class="role-card"><div class="role-card-name">我風貫通（ウォフォングァントン）</div><div class="role-card-desc">自風と同じ段の牌が5枚以上含まれる（共鳴風成立時は無効）。</div><div class="role-card-sub">5枚：+600点　7枚：+1200点　9枚：+2000点</div></div>
+        <div class="role-card"><div class="role-card-name">共鳴風（ゴンミンフォン）</div><div class="role-card-desc">場風牌・自風牌をそれぞれ5枚以上含んであがる（場風と自風が異なる場合のみ）。</div><div class="role-card-sub">各5枚：+2000点　各7枚：+4000点</div></div>
+        <div class="role-card"><div class="role-card-name">母音流（ムーインリィゥ）</div><div class="role-card-desc">母音の流れが同じ単語が3組以上ある。</div><div class="role-card-sub">3組：+600点　4組：+1500点　5組以上：+2000点</div></div>
+      </div>
+
+      <div id="tab-lscore" class="rules-content hidden">
+        <div class="rules-section-title">ベース点（単語点）</div>
+        <table class="score-table">
+          <tr><th>文字数</th><th>点数</th></tr>
+          <tr><td>2文字</td><td>200点</td></tr>
+          <tr><td>3文字</td><td>300点</td></tr>
+          <tr><td>4文字（カン）</td><td>400点</td></tr>
+          <tr><td>5文字（カン）</td><td>500点</td></tr>
+        </table>
+        <div class="rules-section-title" style="margin-top:14px;">計算例</div>
+        <div class="score-example">
+          <div>2文字×1 + 3文字×4 = 200+300×4 = 1400点</div>
+          <div>＋立直ボーナス 800点</div>
+          <div class="score-example-total">合計 2200点</div>
+        </div>
+      </div>
+
+      <div id="tab-ldora" class="rules-content hidden">
+        <div class="rules-section">
+          <div class="rules-section-title">風（カゼ）</div>
+          <p class="rules-text">ゲーム開始時にランダムで場風と各プレイヤーの自風が設定されます。ラウンドが進むごとに1段階進みます。</p>
+        </div>
+        <div class="rules-section">
+          <div class="rules-section-title">ドラ点数</div>
+          <table class="score-table">
+            <tr><th>場面</th><th>1枚あたり</th></tr>
+            <tr><td>ポン・カン時（仮加算）</td><td>+200点</td></tr>
+            <tr><td>あがり時（全組合計）</td><td>+500点</td></tr>
+          </table>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+  <script src="js/firebase-config.js"></script>
+  <script src="js/utils.js"></script>
+  <script src="js/lobby.js"></script>
+
+  <script>
+    document.getElementById('lobbyRulesBtn').addEventListener('click', function() {
+      document.getElementById('lobbyRulesModal').classList.remove('hidden');
+    });
+    document.getElementById('lobbyRulesCloseBtn').addEventListener('click', function() {
+      document.getElementById('lobbyRulesModal').classList.add('hidden');
+    });
+    document.querySelectorAll('#lobbyRulesModal .rules-tab').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        var tab = btn.dataset.tab;
+        document.querySelectorAll('#lobbyRulesModal .rules-tab').forEach(function(b) {
+          b.classList.remove('rules-tab-active');
+        });
+        document.querySelectorAll('#lobbyRuysModal .rules-content, #lobbyRulesModal .rules-content').forEach(function(c) {
+          c.classList.add('hidden');
+        });
+        btn.classList.add('rules-tab-active');
+        var el = document.getElementById('tab-' + tab);
+        if (el) el.classList.remove('hidden');
+      });
+    });
+  </script>
+</body>
+</html>
