@@ -797,3 +797,19 @@ function calcRoleBonus(roles) {
 }
 
 console.log("✅ 役システム 読み込み完了");
+
+// ============================================================
+// テスト用エクスポート（ブラウザでは無視される）
+// ============================================================
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = {
+    BASIC_SOUNDS, SPECIAL_SOUNDS, INITIAL_HAND_SIZE, WIN_SET_COUNT,
+    createShuffledDeck, drawTilesFromDeck, generateRoomId,
+    calcWordScore, getNextPlayer, validateAgari,
+    detectTourentan, isHahaSomeWord, hasDakuten, isDandakubo, hasYoon,
+    hasDuplicateChar, getVowelFlow, detectRoles, calcRoleBonus,
+    initWinds, advanceWinds, getWindRowTiles, initDoraTiles, addKanDora,
+    shuffleArray, calcDoraBonus, calcDoraCount, calcSetsDora,
+    VOWEL_MAP, ROW_MAP
+  };
+}

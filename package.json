@@ -1,0 +1,13 @@
+{
+  "name": "hiragajan",
+  "version": "1.0.0",
+  "description": "ひらがな牌で単語を作る麻雀風の対戦単語ゲーム",
+  "private": true,
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "devDependencies": {
+    "vitest": "^2.1.8"
+  }
+}
