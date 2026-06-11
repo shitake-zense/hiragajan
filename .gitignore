@@ -10,6 +10,9 @@ firebase-debug.*.log*
 # Firebase cache
 .firebase/
 
+# 辞書ビルドのソースデータ（10MB・tools/build-dictionary.mjs が使用）
+tools/JMdict_e.gz
+
 # Firebase config
 
 # Uncomment this if you'd like others to create their own Firebase project.

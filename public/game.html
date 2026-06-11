@@ -27,6 +27,7 @@
       <h2 class="card-title">参加者</h2>
       <ul id="playerList" class="player-list"></ul>
     </div>
+    <p id="dictCheckStatus" class="status-text hidden"></p>
     <p id="waitingForOpponent" class="status-text">⌛ 相手の参加を待っています...</p>
     <p id="waitingForHost"     class="status-text hidden">⌛ ホストがゲームを開始するのを待っています...</p>
     <button id="startGameBtn"  class="btn btn-primary btn-large hidden">ゲームスタート</button>
@@ -320,6 +321,10 @@
             <li>宣言後はポン・カン不可</li>
           </ul>
         </div>
+        <div class="rules-section">
+          <div class="rules-section-title">辞書チェック（ルーム設定）</div>
+          <p class="rules-text">ONのルームでは、辞書に載っている単語だけが確定できます（ポン・カン・立直・あがりすべてに適用）。OFFのルームでは自由な文字列で遊べます。</p>
+        </div>
       </div>
 
       <div id="tab-roles" class="rules-content hidden">
@@ -477,6 +482,7 @@
   <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
   <script src="js/firebase-config.js"></script>
   <script src="js/utils.js"></script>
+  <script src="js/dictionary.js"></script>
   <script src="js/game.js"></script>
 </body>
 </html>

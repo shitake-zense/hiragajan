@@ -32,6 +32,16 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   });
 
+  // ---- 辞書チェック選択 ----
+  let selectedDictCheck = true;
+  document.querySelectorAll("#dictCheckSelect .count-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      document.querySelectorAll("#dictCheckSelect .count-btn").forEach(b => b.classList.remove("count-btn-active"));
+      btn.classList.add("count-btn-active");
+      selectedDictCheck = btn.dataset.dict === "on";
+    });
+  });
+
   // ---- ルーム作成 ----
   createRoomBtn.addEventListener("click", async () => {
     const name = playerNameInput.value.trim();
@@ -50,6 +60,7 @@ document.addEventListener("DOMContentLoaded", () => {
         expireAt,
         maxPlayers:    selectedMaxPlayers,
         maxRounds:     selectedMaxRounds,
+        dictCheck:     selectedDictCheck,
         currentRound:  1,
         totalScores:   {},
         roundHistory:  [],

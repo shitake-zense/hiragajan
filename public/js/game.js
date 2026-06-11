@@ -272,6 +272,8 @@ function renderWaiting(room, myData) {
   setVisible('startGameBtn',       myData.isHost && both);
   setVisible('waitingForOpponent', myData.isHost && !both);
   setVisible('waitingForHost',     !myData.isHost && !both);
+  setText('dictCheckStatus', '📖 辞書チェック: ' + (room.dictCheck ? 'ON' : 'OFF'));
+  setVisible('dictCheckStatus', true);
   const list = document.getElementById('playerList');
   if (!list) return;
   list.innerHTML = '';
@@ -318,6 +320,20 @@ function renderOpponents(room, opIds) {
     // 確定済み組
     renderLockedSets(lockedId, opData.lockedSets || [], opData.riichiSets || [], false);
   });
+}
+
+/**
+ * 辞書チェック（ルーム設定 dictCheck が ON のときのみ）
+ * @param {Object}   room  - ルームドキュメント
+ * @param {string[]} tiles - 単語を構成する牌
+ * @returns {string|null} エラーメッセージ（問題なければ null）
+ */
+function checkDictWord(room, tiles) {
+  if (!room || !room.dictCheck) return null;
+  if (typeof isValidWord !== 'function') return null; // 辞書未ロード時はスキップ
+  const word = (tiles || []).join('');
+  if (!isValidWord(word)) return '「' + word + '」は辞書にない単語です';
+  return null;
 }
 
 /** XSS対策: HTML特殊文字をエスケープ */
@@ -1082,6 +1098,8 @@ async function kanTiles() {
       if (room.turnPhase   !== 'discard')  throw new Error('discardフェーズではない');
       const hand  = room.players[myPlayerId].hand.slice();
       const tiles = selectedIndices.map(i => hand[i]);
+      const dictErr = checkDictWord(room, tiles);
+      if (dictErr) throw new Error(dictErr);
       selectedIndices.slice().sort((a, b) => b - a).forEach(i => hand.splice(i, 1));
       const deck = room.deck.slice();
       const extra = [];
@@ -1191,6 +1209,8 @@ async function lockPonWord() {
       if (!selectedIndices.some(i => hand[i] === ct)) throw new Error('「' + ct + '」を含む単語を作ってください');
       if (selectedIndices.length !== 3) throw new Error('ポンは3文字の単語のみ確定できます');
       const tiles     = selectedIndices.map(i => hand[i]);
+      const dictErr   = checkDictWord(room, tiles);
+      if (dictErr) throw new Error(dictErr);
       const word      = tiles.join('');
       const score     = calcWordScore(tiles);       // あがり時用（文字数×100）
       const tempScore = (tiles.length - 1) * 100;  // 仮加算（文字数-1）×100 → ポンは200点
@@ -1289,6 +1309,8 @@ function renderRiichiStep1() {
 function riichiConfirmGroup() {
   const selOrder = riichiState.currentSelection.slice();          // タップ順を保持
   const tiles    = selOrder.map(i => riichiState.remainingHand[i]);
+  const dictErr  = checkDictWord(currentRoom, tiles);
+  if (dictErr) { showMsg('❌ ' + dictErr); return; }
   selOrder.slice().sort((a, b) => b - a).forEach(i => riichiState.remainingHand.splice(i, 1));
   riichiState.confirmedGroups.push({ tiles, word: tiles.join(''), score: calcWordScore(tiles), type: 'riichi' });
   riichiState.currentSelection = [];
@@ -1468,6 +1490,8 @@ function renderRiichiAgariOrderModal() {
 }
 
 function confirmRiichiAgariOrder() {
+  const dictErr = checkDictWord(currentRoom, riichiAgariState.tiles);
+  if (dictErr) { showMsg('❌ ' + dictErr + '。並び順を変えてください'); return; }
   setVisible('riichiAgariModal', false);
   if (riichiAgariState.onConfirm) riichiAgariState.onConfirm(riichiAgariState.tiles.slice());
 }
@@ -1479,6 +1503,8 @@ async function executeRon(orderedTiles) {
       const roomRef = db.collection('rooms').doc(roomId);
       const snap = await t.get(roomRef); const room = snap.data();
       const myData = room.players[myPlayerId];
+      const dictErr = checkDictWord(room, orderedTiles);
+      if (dictErr) throw new Error(dictErr);
       const pile   = (room.discardPile || []).slice(); pile.pop();
       const fg     = { tiles: orderedTiles, word: orderedTiles.join(''), score: calcWordScore(orderedTiles), type: 'tsumo' };
       const finalSets = (myData.lockedSets || []).concat(myData.riichiSets || []).concat([fg]);
@@ -1517,6 +1543,8 @@ async function executeTsumo(orderedTiles) {
       if (room.currentTurn !== myPlayerId) throw new Error('自分のターンではない');
       if (room.turnPhase   !== 'discard')  throw new Error('discardフェーズではない');
       const myData = room.players[myPlayerId];
+      const dictErr = checkDictWord(room, orderedTiles);
+      if (dictErr) throw new Error(dictErr);
       const fg     = { tiles: orderedTiles, word: orderedTiles.join(''), score: calcWordScore(orderedTiles), type: 'tsumo' };
       const finalSets = (myData.lockedSets || []).concat(myData.riichiSets || []).concat([fg]);
       const ctx       = {
@@ -1694,6 +1722,8 @@ function renderAgariModal() {
 function confirmAgariGroup() {
   const selOrder = agariState.currentSelection.slice(); // タップ順を保持（sort しない）
   const tiles    = selOrder.map(i => agariState.remainingHand[i]);
+  const dictErr  = checkDictWord(currentRoom, tiles);
+  if (dictErr) { showMsg('❌ ' + dictErr); return; }
   // 削除はインデックスずれ防止のため降順
   selOrder.slice().sort((a, b) => b - a).forEach(i => agariState.remainingHand.splice(i, 1));
   agariState.confirmedGroups.push({ tiles, word: tiles.join(''), score: calcWordScore(tiles), type: 'tsumo' });
@@ -1724,6 +1754,10 @@ async function submitAgari() {
       const snap = await t.get(roomRef); const room = snap.data();
       if (room.currentTurn !== myPlayerId) throw new Error('自分のターンではない');
       if (room.turnPhase   !== 'discard')  throw new Error('discardフェーズではない');
+      for (const g of agariState.confirmedGroups) {
+        const dictErr = checkDictWord(room, g.tiles);
+        if (dictErr) throw new Error(dictErr);
+      }
 
       const myDataT    = room.players[myPlayerId];
       const riichiSets = myDataT.riichiSets || [];
