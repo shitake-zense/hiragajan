@@ -76,3 +76,18 @@ python -m http.server 8080
 - `public/js/game.js`: ゲーム進行
 - `public/js/utils.js`: 牌、役、点数まわり
 - `public/js/firebase-config.js`: Firebase 設定
+
+### 古いルームの自動削除（TTL）
+
+ルーム作成時に `expireAt`（作成から7日後）フィールドを書き込んでいます。
+Firestore の TTL ポリシーを一度だけ設定すると、失効したルームが自動削除されます。
+
+```bash
+gcloud firestore fields ttls update expireAt \
+  --collection-group=rooms \
+  --enable-ttl \
+  --project=hiragajan-f3887
+```
+
+または Firebase コンソール → Firestore →「TTL」から `rooms` コレクションの
+`expireAt` フィールドを有効化してください。
