@@ -25,4 +25,11 @@ firebase.initializeApp(firebaseConfig);
 // 他のJSファイルから `db.collection(...)` として使える
 const db = firebase.firestore();
 
+// iOS Safari など一部環境では、Firestore のリアルタイム更新（onSnapshot）に
+// 使われる WebChannel ストリーミングがうまく流れず、状態反映が数秒〜十数秒
+// 遅延することがある（ページ読み込みは正常なのに対戦中だけ重い症状）。
+// ストリーミングが流れない環境を自動検出し、ロングポーリングへ切り替える。
+// ※ settings() は他の Firestore 操作より前に1度だけ呼ぶ必要がある。
+db.settings({ experimentalAutoDetectLongPolling: true });
+
 console.log("✅ Firebase 初期化完了");
