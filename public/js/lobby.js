@@ -42,9 +42,12 @@ document.addEventListener("DOMContentLoaded", () => {
     try {
       const roomId  = generateRoomId();
       const roomRef = db.collection("rooms").doc(roomId);
+      // 作成から7日後を失効時刻に設定（Firestore TTLポリシーで自動削除される）
+      const expireAt = firebase.firestore.Timestamp.fromMillis(Date.now() + 7 * 24 * 60 * 60 * 1000);
       await roomRef.set({
         roomId,
         status:        "waiting",
+        expireAt,
         maxPlayers:    selectedMaxPlayers,
         maxRounds:     selectedMaxRounds,
         currentRound:  1,
