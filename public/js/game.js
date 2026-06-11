@@ -688,7 +688,7 @@ function renderRoundSummary(room, myData) {
   if (winnerEl && last) {
     const isMe = last.winnerId === myPlayerId;
     winnerEl.innerHTML =
-      "<div class='round-winner-label'>" + (isMe ? '🎉 あなたのあがり！' : '🎯 ' + last.winnerName + ' のあがり！') + "</div>" +
+      "<div class='round-winner-label'>" + (isMe ? '🎉 あなたのあがり！' : '🎯 ' + escapeHtml(last.winnerName) + ' のあがり！') + "</div>" +
       "<div class='round-winner-score'>+" + (last.winnerScore || 0) + '点</div>';
   }
 
@@ -699,8 +699,8 @@ function renderRoundSummary(room, myData) {
       const div = document.createElement('div');
       div.className = 'round-word-row';
       div.innerHTML =
-        "<span class='round-word-tiles'>" + (w.tiles || []).join('') + "</span>" +
-        "<span class='round-word-label'>" + w.word + "</span>" +
+        "<span class='round-word-tiles'>" + escapeHtml((w.tiles || []).join('')) + "</span>" +
+        "<span class='round-word-label'>" + escapeHtml(w.word) + "</span>" +
         "<span class='round-word-score'>+" + w.score + '点</span>';
       wordsEl.appendChild(div);
     });
@@ -711,7 +711,7 @@ function renderRoundSummary(room, myData) {
       const doraDetailStr = (last.doraDetail || []).map(function(d) {
         return d.tile + (d.mult > 1 ? '×' + d.mult + '倍' : '') + (d.times > 1 ? ' ' + d.times + '枚' : '');
       }).join(' ');
-      doraDiv.innerHTML = "<span class='round-word-tiles'>🀄</span><span class='round-word-label'>ドラ " + last.doraCount + "枚" + (doraDetailStr ? "（" + doraDetailStr + "）" : "") + "</span><span class='round-word-score'>+" + last.doraBonus + '点</span>';
+      doraDiv.innerHTML = "<span class='round-word-tiles'>🀄</span><span class='round-word-label'>ドラ " + last.doraCount + "枚" + (doraDetailStr ? "（" + escapeHtml(doraDetailStr) + "）" : "") + "</span><span class='round-word-score'>+" + last.doraBonus + '点</span>';
       wordsEl.appendChild(doraDiv);
     }
   }
@@ -1665,7 +1665,7 @@ function renderAgariModal() {
     } else {
       roles.forEach(r => {
         const row = document.createElement('div'); row.className = 'role-row';
-        row.innerHTML = '<span class="role-name">' + r.name + '</span><span class="role-desc">' + r.desc + '</span><span class="role-score">+' + r.score + '点</span>';
+        row.innerHTML = '<span class="role-name">' + escapeHtml(r.name) + '</span><span class="role-desc">' + escapeHtml(r.desc) + '</span><span class="role-score">+' + r.score + '点</span>';
         roleEl.appendChild(row);
       });
     }
@@ -1680,7 +1680,7 @@ function renderAgariModal() {
     const summary = document.createElement('div'); summary.className = 'score-summary';
     summary.innerHTML =
       '<div class="score-row"><span>単語点</span><span>+' + baseScore + '点</span></div>' +
-      (doraTileCount > 0 ? '<div class="score-row dora-row"><span>🀄 ドラ ' + doraTileCount + '枚（' + doraDetailStr + '）</span><span>+' + doraBonus + '点</span></div>' : '') +
+      (doraTileCount > 0 ? '<div class="score-row dora-row"><span>🀄 ドラ ' + doraTileCount + '枚（' + escapeHtml(doraDetailStr) + '）</span><span>+' + doraBonus + '点</span></div>' : '') +
       (roleBonus > 0 ? '<div class="score-row"><span>役ボーナス</span><span>+' + roleBonus + '点</span></div>' : '') +
       '<div class="score-row score-total"><span>今回の獲得点</span><span>+' + totalGain + '点</span></div>';
     roleEl.appendChild(summary);
@@ -1913,7 +1913,7 @@ function renderStandingsModal(room) {
       const medal = ['🥇','🥈','🥉'][i] || (i + 1) + '位';
       row.innerHTML =
         '<span class="standings-rank">' + medal + '</span>' +
-        '<span class="standings-name">' + p.name + '</span>' +
+        '<span class="standings-name">' + escapeHtml(p.name) + '</span>' +
         '<span class="standings-score">' + (totalScores[pid] || 0) + '点</span>';
       totalEl.appendChild(row);
     });
