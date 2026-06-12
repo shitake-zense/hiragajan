@@ -120,6 +120,7 @@ document.addEventListener('DOMContentLoaded', () => {
   on('sortModeBtn',   toggleSortMode);
   on('sortAiueoBtn',  sortByAiueo);
   on('copyRoomIdBtn', copyRoomId);
+  on('copyJoinLinkBtn', copyJoinLink);
   on('standingsBtn',      openStandingsModal);
   on('standingsCloseBtn', closeStandingsModal);
   on('rulesBtn',      openRulesModal);
@@ -1859,12 +1860,34 @@ function setText(id, text) {
 }
 
 function copyRoomId() {
-  navigator.clipboard.writeText(roomId).then(() => {
-    const btn = document.getElementById('copyRoomIdBtn');
+  copyToClipboard(roomId, 'copyRoomIdBtn', 'IDをコピー');
+}
+
+/** 参加リンク（index.html?room=XXXXXX）をコピーする */
+function copyJoinLink() {
+  const url = new URL('index.html', location.href);
+  url.searchParams.set('room', roomId);
+  copyToClipboard(url.href, 'copyJoinLinkBtn', '参加リンクをコピー');
+}
+
+/** クリップボードへコピーし、ボタンに成功表示。失敗時はトースト。 */
+function copyToClipboard(text, btnId, defaultLabel) {
+  const btn = document.getElementById(btnId);
+  const ok = () => {
     if (!btn) return;
     btn.textContent = 'コピー済み！';
-    setTimeout(() => { btn.textContent = 'IDをコピー'; }, 2000);
-  });
+    setTimeout(() => { btn.textContent = defaultLabel; }, 2000);
+  };
+  const fail = () => showMsg('コピーできませんでした');
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(ok).catch(fail);
+    } else {
+      fail();
+    }
+  } catch (e) {
+    fail();
+  }
 }
 
 function showMsg(msg) {

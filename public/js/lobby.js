@@ -12,6 +12,14 @@ document.addEventListener("DOMContentLoaded", () => {
 
   playerNameInput.value = getPlayerName();
 
+  // ---- 共有URL（index.html?room=XXXXXX）で来た場合、参加フォームにIDを事前入力 ----
+  // 自動入室はしない（名前を入れて従来どおり参加してもらう）
+  const sharedRoom = (new URLSearchParams(location.search).get("room") || "").replace(/\D/g, "").slice(0, 6);
+  if (sharedRoom) {
+    roomIdInput.value = sharedRoom;
+    roomIdInput.focus();
+  }
+
   // ---- 人数選択 ----
   let selectedMaxPlayers = 2;
   document.querySelectorAll("#playerCountSelect .count-btn").forEach(btn => {
