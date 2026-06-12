@@ -321,12 +321,6 @@ function isHahaSomeWord(tiles) {
   return vowelTiles.every(function(c) { return VOWEL_MAP[c] === first; });
 }
 
-/**
- * 役を自動検出する
- * @param {Array}   allSets      - 全組（lockedSets + submittedSets）
- * @param {boolean} riichiActive - 立直宣言していたか
- * @returns {Array} [{id, name, score, desc}]
- */
 // ============================================================
 // 濁音・半濁音・あ行 判定セット
 // ============================================================
@@ -392,18 +386,6 @@ function getVowelFlow(tiles) {
   }).filter(function(v) { return v !== null; }).join('');
 }
 
-/**
- * 役を検出する
- * @param {Array}   allSets      - 全組
- * @param {boolean} riichiActive - 立直宣言していたか
- * @param {Object}  ctx          - 追加コンテキスト
- *   ctx.lockedSets   {Array}   - ポン/カン組（門前判定用）
- *   ctx.turnCount    {number}  - あがり時のturnCount
- *   ctx.riichiAt     {number}  - リーチ宣言時のturnCount (-1=未宣言)
- *   ctx.playerCount  {number}  - プレイヤー数（一発1巡の計算用）
- *   ctx.baWind       {string}  - 場風の名前（例: "え風"）
- *   ctx.myWind       {string}  - 自風の名前（例: "あ風"）
- */
 // ============================================================
 // 風・ドラシステム
 // ============================================================
@@ -598,6 +580,19 @@ function calcSetsDora(allSets, doraTiles, perDora) {
 }
 
 
+/**
+ * 役を自動検出する
+ * @param {Array}   allSets      - 全組（lockedSets + submittedSets）
+ * @param {boolean} riichiActive - 立直宣言していたか
+ * @param {Object}  ctx          - 追加コンテキスト
+ *   ctx.lockedSets   {Array}   - ポン/カン組（門前判定用）
+ *   ctx.turnCount    {number}  - あがり時のturnCount
+ *   ctx.riichiAt     {number}  - リーチ宣言時のturnCount (-1=未宣言)
+ *   ctx.playerCount  {number}  - プレイヤー数（一発1巡の計算用）
+ *   ctx.baWind       {string}  - 場風の名前（例: "え風"）
+ *   ctx.myWind       {string}  - 自風の名前（例: "あ風"）
+ * @returns {Array} [{id, name, score, desc}]
+ */
 function detectRoles(allSets, riichiActive, ctx) {
   ctx = ctx || {};
   var roles = [];

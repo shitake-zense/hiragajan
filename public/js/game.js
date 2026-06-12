@@ -376,16 +376,13 @@ function renderDoraWindBar(room) {
 
   // ドラ牌表示（あいうえおは除く）
   const doraTilesEl = document.getElementById('doraTilesDisplay');
-  const AROW = new Set(['あ','い','う','え','お']);
   if (doraTilesEl) {
     doraTilesEl.innerHTML = '';
     const dora       = room.doraTiles || {};
-    const AEIOU_SET  = new Set(['あ','い','う','え','お']);
     Object.keys(dora).sort().forEach(char => {
       const mult = dora[char] || 0;
       if (mult <= 0) return;
-      if (AEIOU_SET.has(char)) return; // あいうえおは表示欄に出さない
-      if (AROW.has(char)) return; // あいうえおは非表示
+      if (AIUEO_SET.has(char)) return; // あいうえおは表示欄に出さない（既にドラ）
       const tile = makeTile(char, 'tile-dora-display');
       if (mult >= 2) tile.classList.add('tile-dora-2');
       else           tile.classList.add('tile-dora');
@@ -2063,15 +2060,8 @@ async function playAgain() {
       doraTiles:     dora
     };
     room.playerOrder.forEach(pid => {
-      upd['players.' + pid + '.hand']         = [];
-      upd['players.' + pid + '.lockedSets']   = [];
-      upd['players.' + pid + '.score']        = 0;
-      upd['players.' + pid + '.ponKanScore']  = 0;
-      upd['players.' + pid + '.riichi']       = false;
-      upd['players.' + pid + '.riichiAt']     = -1;
-      upd['players.' + pid + '.riichiSets']   = [];
-      upd['players.' + pid + '.riichiHand']   = [];
-      upd['players.' + pid + '.waitingTiles'] = [];
+      // makePlayerReset と同一の9フィールド（hand は再戦時 [] 固定）
+      upd = Object.assign(upd, makePlayerReset(pid, []));
     });
     await roomRef.update(upd);
     // 待機画面に戻る（onSnapshotが自動で画面を切り替える）
