@@ -38,6 +38,7 @@ let localHandDisplay = [];
 let currentDoraTiles = {};  // { tile: multiplier } ラウンドごとに更新
 let sortMode         = false;
 let sortFirstIdx     = null;
+let autoPassTimer    = null;  // 立直者の自動パスタイマー（多重予約防止用に1つだけ保持）
 
 let riichiState = {
   remainingHand:    [],
@@ -611,7 +612,11 @@ function renderActionPanel(room, isMyTurn, myData) {
 function renderPonOverlay(room) {
   const show = room.turnPhase === 'pon_window';
   setVisible('ponOverlay', show);
-  if (!show) return;
+  if (!show) {
+    // pon_window を抜けたら予約済みの自動パスタイマーを破棄（古い発火による巻き戻し防止）
+    if (autoPassTimer !== null) { clearTimeout(autoPassTimer); autoPassTimer = null; }
+    return;
+  }
 
   const pon        = room.ponWindow || {};
   const isEligible = pon.eligiblePlayer === myPlayerId;
@@ -638,7 +643,10 @@ function renderPonOverlay(room) {
         if (ronBtn)  ronBtn.classList.add('hidden');
         if (ponBtn)  ponBtn.disabled  = true;
         if (passBtn) passBtn.disabled = false;
-        setTimeout(() => passPon(), 300);
+        // 自動パス: 再描画ごとにタイマーを積まない（予約は常に1つだけ）
+        if (autoPassTimer === null) {
+          autoPassTimer = setTimeout(() => { autoPassTimer = null; passPon(); }, 300);
+        }
       }
     } else {
       if (ponBtn)  ponBtn.disabled  = false;
@@ -1085,6 +1093,8 @@ async function passPon() {
       const roomRef = db.collection('rooms').doc(roomId);
       const snap    = await t.get(roomRef);
       const room    = snap.data();
+      // フェーズガード: pon_window 以外なら何もしない（古い自動パスタイマーの巻き戻し防止）
+      if (room.turnPhase !== 'pon_window') return;
       const ponWindow = { active: false, tile: null, discardedBy: null, eligiblePlayer: null };
 
       // 山が空なら次のdrawフェーズに進めず終局
