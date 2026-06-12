@@ -934,6 +934,19 @@ function buildRoundResult(room, winnerId, winnerScore, finalSets, roles) {
   return { roundScores, totalScores, roundHistory };
 }
 
+/**
+ * 検索/正規化用: 片仮名→平仮名に変換し、前後の空白を除去する。
+ * 「ー」（長音符）はそのまま保持する。辞書は常にひらがなで持つため、
+ * 辞書照合の入力も同じ正規化を通す（tools/build-dictionary.mjs の kataToHira と同等）。
+ * @param {string} str
+ * @returns {string}
+ */
+function toHiraganaWord(str) {
+  return String(str == null ? '' : str)
+    .trim()
+    .replace(/[ァ-ヶ]/g, ch => String.fromCharCode(ch.charCodeAt(0) - 0x60));
+}
+
 // ============================================================
 // テスト用エクスポート（ブラウザでは無視される）
 // ============================================================
@@ -948,7 +961,7 @@ if (typeof module !== 'undefined' && module.exports) {
     initWinds, advanceWinds, getWindRowTiles, initDoraTiles, addKanDora,
     shuffleArray, calcDoraBonus, calcDoraCount, calcSetsDora,
     calcAgariBreakdown, calcAgariScore, buildDrawResult, buildRoundResult,
-    canFormDictWord,
+    canFormDictWord, toHiraganaWord,
     VOWEL_MAP, ROW_MAP
   };
 }
