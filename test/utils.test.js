@@ -5,7 +5,8 @@ import {
   calcDoraBonus, calcDoraCount, calcSetsDora,
   isHahaSomeWord, getVowelFlow, detectTourentan,
   initWinds, advanceWinds, getWindRowTiles,
-  initDoraTiles, addKanDora, VOWEL_MAP
+  initDoraTiles, addKanDora, VOWEL_MAP,
+  calcAgariScore, buildDrawResult, buildRoundResult
 } from '../public/js/utils.js';
 
 // 組を作るヘルパー（tiles配列からセットオブジェクトを生成）
@@ -328,5 +329,78 @@ describe('addKanDora', () => {
     const before = { 'か': 1 };
     expect(addKanDora(before, '')).toEqual(before);
     expect(addKanDora(before, 'ん風')).toEqual(before);
+  });
+});
+
+describe('calcAgariScore（二段階スコア計算）', () => {
+  // ドラを避けるため あ/い/う/え/お を含まない組を使う
+  const sets = [set('かきく'), set('さしす'), set('たちつ'), set('なにぬ'), set('ねの')]; // 14文字
+
+  it('ポン/カン仮加算分を差し引いて正規点（文字数×100）で再計算する', () => {
+    // score 700 のうち 700 はポン/カン仮加算 → 差し引かれて baseScore のみ残る
+    const myData = { score: 700, ponKanScore: 700 };
+    // baseScore = 14×100 = 1400, role 0, dora 0 → 1400
+    expect(calcAgariScore(myData, sets, [], {})).toBe(1400);
+  });
+
+  it('ponKanScore=0 のときは prevScore=score でそのまま加算', () => {
+    const myData = { score: 0, ponKanScore: 0 };
+    // baseScore 1400 + roleBonus 500 = 1900
+    expect(calcAgariScore(myData, sets, [{ score: 500 }], {})).toBe(1900);
+  });
+});
+
+describe('buildRoundResult（あがり集計）', () => {
+  const room = {
+    currentRound: 2,
+    playerOrder: ['a', 'b'],
+    players: {
+      a: { name: 'Alice', ponKanScore: 200 },
+      b: { name: 'Bob',   ponKanScore: 100 }
+    },
+    totalScores:  { a: 500, b: 300 },
+    roundHistory: [{ round: 1 }],
+    doraTiles: {}
+  };
+  const finalSets = [set('かきく'), set('さしす'), set('たちつ'), set('なにぬ'), set('ねの')];
+  const res = buildRoundResult(room, 'a', 1400, finalSets, []);
+
+  it('勝者は winnerScore、敗者は ponKanScore のみ確定', () => {
+    expect(res.roundScores).toEqual({ a: 1400, b: 100 });
+  });
+
+  it('totalScores にラウンド得点が累積される', () => {
+    expect(res.totalScores).toEqual({ a: 1900, b: 400 });
+  });
+
+  it('roundHistory に勝者情報が追記される', () => {
+    expect(res.roundHistory).toHaveLength(2);
+    expect(res.roundHistory[1].round).toBe(2);
+    expect(res.roundHistory[1].winnerName).toBe('Alice');
+    expect(res.roundHistory[1].winnerScore).toBe(1400);
+  });
+});
+
+describe('buildDrawResult（山切れ終局）', () => {
+  const room = {
+    currentRound: 3,
+    playerOrder: ['a', 'b'],
+    players: {
+      a: { name: 'Alice', ponKanScore: 200 },
+      b: { name: 'Bob',   ponKanScore: 500 }
+    },
+    totalScores:  { a: 100, b: 100 },
+    roundHistory: []
+  };
+  const res = buildDrawResult(room);
+
+  it('全員 ponKanScore のみ確定し totalScores に累積', () => {
+    expect(res.roundScores).toEqual({ a: 200, b: 500 });
+    expect(res.totalScores).toEqual({ a: 300, b: 600 });
+  });
+
+  it('勝者は ponKanScore 最大、winnerName に「（山切れ）」が付く', () => {
+    expect(res.roundHistory[0].winnerName).toBe('Bob（山切れ）');
+    expect(res.roundHistory[0].winnerScore).toBe(500);
   });
 });

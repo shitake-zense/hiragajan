@@ -856,86 +856,9 @@ function renderFinish(room) {
 // 5. ゲームアクション（Firestore 書き込み）
 // ============================================================
 
-/**
- * あがり時のスコアを計算する共通ヘルパー
- * ポン/カン仮加算分を差し引いて全組を文字数×100で再計算する
- * @param {Object} myData    - Firestoreのプレイヤーデータ
- * @param {Array}  finalSets - 全組
- * @param {Array}  roles     - 検出された役
- * @returns {number} 最終的なスコア（0以上）
- */
-function calcAgariScore(myData, finalSets, roles, doraTiles) {
-  // 全組のベース点を文字数×100で計算（ロック組も含む）
-  const baseScore = finalSets.reduce((s, g) => s + calcWordScore(g.tiles || []), 0);
-  const roleBonus = calcRoleBonus(roles);
-  // ドラ500/枚（あがり時）
-  const doraBonus = calcSetsDora(finalSets, doraTiles || {}, 500);
-  // ポン/カン仮加算分（文字数仮点 + ドラ200）を差し引いて正規点数で上書き
-  const ponKanTemp = myData.ponKanScore || 0;
-  const prevScore  = myData.score - ponKanTemp;
-  return prevScore + baseScore + roleBonus + doraBonus;
-}
-
-/**
- * 山切れ終局時のスコア・履歴計算
- * あがりではないので全員 ponKanScore のみ確定。正規化なし。
- */
-function buildDrawResult(room) {
-  const currentRound = room.currentRound || 1;
-  const roundScores  = {};
-  room.playerOrder.forEach(pid => {
-    // 山切れ時は全プレイヤーのポン/カン仮加算のみ確定
-    roundScores[pid] = room.players[pid].ponKanScore || 0;
-  });
-  const totalScores = Object.assign({}, room.totalScores || {});
-  room.playerOrder.forEach(pid => {
-    totalScores[pid] = (totalScores[pid] || 0) + (roundScores[pid] || 0);
-  });
-  // 勝者は現在スコア（ponKanScore込み）が最大のプレイヤー
-  const winnerId = room.playerOrder.slice().sort((a, b) =>
-    (roundScores[b] || 0) - (roundScores[a] || 0)
-  )[0];
-  const roundHistory = (room.roundHistory || []).concat([{
-    round: currentRound,
-    winnerId,
-    winnerName: room.players[winnerId].name + '（山切れ）',
-    winnerScore: roundScores[winnerId] || 0,
-    words: [], roles: [], scores: roundScores,
-    doraCount: 0, doraDetail: [], doraBonus: 0
-  }]);
-  return { roundScores, totalScores, roundHistory };
-}
-
-/** ラウンド終了時のスコア・履歴計算（あがり共通） */
-function buildRoundResult(room, winnerId, winnerScore, finalSets, roles) {
-  const currentRound = room.currentRound || 1;
-  const roundScores  = {};
-  room.playerOrder.forEach(pid => {
-    if (pid === winnerId) {
-      // あがったプレイヤー：calcAgariScoreで算出したwinnerScoreを使用
-      roundScores[pid] = winnerScore;
-    } else {
-      // あがれなかったプレイヤー：ポン/カン仮加算（ponKanScore）のみ確定
-      // ※仕様: ポン/カンは試合中の点数として残るが、正規化（文字数×100）はされない
-      roundScores[pid] = room.players[pid].ponKanScore || 0;
-    }
-  });
-  const totalScores = Object.assign({}, room.totalScores || {});
-  room.playerOrder.forEach(pid => { totalScores[pid] = (totalScores[pid] || 0) + (roundScores[pid] || 0); });
-  const roundWords = finalSets.map(s => ({
-    tiles: s.tiles || [], word: s.word || (s.tiles || []).join(''),
-    score: (s.score != null) ? s.score : calcWordScore(s.tiles || []), type: s.type || 'tsumo'
-  }));
-  const doraInfo  = calcDoraCount(finalSets, room.doraTiles || {});
-  const doraCount  = doraInfo.count;
-  const doraDetail = doraInfo.detail;
-  const doraBonus  = calcSetsDora(finalSets, room.doraTiles || {}, 500);
-  const roundHistory = (room.roundHistory || []).concat([{
-    round: currentRound, winnerId, winnerName: room.players[winnerId].name,
-    winnerScore, words: roundWords, roles, scores: roundScores, doraCount, doraDetail, doraBonus
-  }]);
-  return { roundScores, totalScores, roundHistory };
-}
+// calcAgariScore / buildDrawResult / buildRoundResult は utils.js に移動した
+// （引数のみに依存するピュア関数のためテスト可能にする目的。
+//   グローバル共有スクリプトなので game.js からそのまま呼べる）
 
 /** プレイヤーのリセットフィールドを返すヘルパー */
 function makePlayerReset(pid, hand) {
@@ -1673,12 +1596,12 @@ function renderAgariModal() {
     };
     const roles   = detectRoles(allSets, myData.riichi || false, ctx);
     agariState.detectedRoles = roles;
-    // プレビューも calcAgariScore と完全同一の計算（ドラボーナスも含む）
-    const baseScore  = allSets.reduce((s, g) => s + calcWordScore(g.tiles), 0);
-    const roleBonus  = calcRoleBonus(roles);
-    const doraBonus  = calcSetsDora(allSets, room ? (room.doraTiles || {}) : {}, 500);
-    const ponKanTemp = myData.ponKanScore || 0;
-    const totalGain  = (myData.score - ponKanTemp) + baseScore + roleBonus + doraBonus;
+    // プレビューは calcAgariScore と同じ内訳ヘルパーを使う（計算式の二重持ちを防ぐ）
+    const bd        = calcAgariBreakdown(myData, allSets, roles, room ? (room.doraTiles || {}) : {});
+    const baseScore = bd.baseScore;
+    const roleBonus = bd.roleBonus;
+    const doraBonus = bd.doraBonus;
+    const totalGain = bd.total;
 
     roleEl.innerHTML = ''; roleEl.classList.remove('hidden');
     const title = document.createElement('div'); title.className = 'role-section-title'; title.textContent = '🀄 検出された役';
