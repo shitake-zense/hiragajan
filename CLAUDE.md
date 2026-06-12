@@ -68,8 +68,8 @@ Firebase SDK は `9.22.0` のCompatライブラリ（CDN経由）を使用。`db
 
 ## 既知の重要な制約・落とし穴
 
-- **辞書チェックはルーム作成時のオプション**（`dictCheck` フィールド、デフォルトON）。ONのとき単語確定の全6箇所（`kanTiles`/`lockPonWord`/`riichiConfirmGroup`/`confirmAgariGroup`/`confirmRiichiAgariOrder`+`executeRon`・`executeTsumo`/`submitAgari`）で `checkDictWord()` が検証する。新たに単語を確定するコードパスを追加する場合は必ず `checkDictWord()` を通すこと
-- **検証の穴（既知・意図的に未対応）**: 立直の待ち牌は自己申告で無検証、立直あがり（`executeRon`/`executeTsumo`）は `validateAgari` を通らない。修正時はこの前提を確認してから
+- **辞書チェックはルーム作成時のオプション**（`dictCheck` フィールド、デフォルトON）。ONのとき単語確定の全6箇所（`kanTiles`/`lockPonWord`/`riichiConfirmGroup`/`confirmAgariGroup`/`confirmRiichiAgariOrder`+`executeRon`・`executeTsumo`/`submitAgari`）で `checkDictWord()` が検証する。立直の待ち牌も追加時（`checkWaitingTileWord`）と宣言確定時（`submitRiichi` 内の `canFormDictWord`）に「残り手牌＋待ち牌で辞書語が作れるか」を検証する。新たに単語を確定するコードパスを追加する場合は必ず `checkDictWord()` を通すこと
+- **検証の穴（既知・意図的に未対応）**: 立直あがり（`executeRon`/`executeTsumo`）は `validateAgari` を通らない。修正時はこの前提を確認してから
 - ポン・ロンの権利は下家（`getNextPlayer` の1人）のみ
 - XSS対策: ユーザー由来文字列（プレイヤー名・単語・役説明等）を `innerHTML` に埋める箇所は全て `escapeHtml()` 適用済み。新規コードでも `innerHTML` への動的埋め込みには必ず `escapeHtml()` を使うか、`textContent` / `makeTile()` を使うこと
 - `var`/`let`/`const` が混在しているが、既存セクションのスタイルに合わせる

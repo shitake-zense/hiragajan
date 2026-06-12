@@ -1299,13 +1299,33 @@ function renderRiichiStep2() {
   if (nextBtn) nextBtn.disabled = riichiState.waitingTiles.length === 0;
 }
 
+/**
+ * 待ち牌の辞書検証（ルーム設定 dictCheck が ON のときのみ）
+ * hand から1枚捨てた残り＋待ち牌の並べ替えで辞書語が作れる捨て方が
+ * 1つでもあれば有効（捨て牌はステップ3で選ぶため、この時点では全候補を試す）。
+ * @param {string[]} hand     - 立直モーダルの残り手牌（捨て牌候補を含む）
+ * @param {string}   waitTile - 待ち牌
+ * @returns {string|null} エラーメッセージ（問題なければ null）
+ */
+function checkWaitingTileWord(hand, waitTile) {
+  if (!currentRoom || !currentRoom.dictCheck) return null;
+  if (typeof isValidWord !== 'function') return null; // 辞書未ロード時はスキップ
+  for (let i = 0; i < hand.length; i++) {
+    const rest = hand.slice(); rest.splice(i, 1);
+    if (canFormDictWord(rest.concat([waitTile]), isValidWord)) return null;
+  }
+  return '「' + waitTile + '」では辞書の単語が完成しません';
+}
+
 function riichiAddWaiting() {
   const input = document.getElementById('riichiWaitInput');
   if (!input) return;
   const val = input.value.trim();
-  if (!val)                                   { showMsg('ひらがな1文字を入力してください'); return; }
-  if (val.length > 2)                         { showMsg('1〜2文字で入力してください');     return; }
+  // 牌は全て1文字なので待ち牌も1文字のみ（2文字以上はあがり牌と一致しえない）
+  if (val.length !== 1)                       { showMsg('待ち牌はひらがな1文字で入力してください'); return; }
   if (riichiState.waitingTiles.includes(val)) { showMsg('すでに追加されています');          return; }
+  const waitErr = checkWaitingTileWord(riichiState.remainingHand, val);
+  if (waitErr) { showMsg('❌ ' + waitErr); return; }
   riichiState.waitingTiles.push(val);
   input.value = '';
   renderRiichiStep2();
@@ -1349,6 +1369,16 @@ async function submitRiichi() {
 
       const riichiHand = riichiState.remainingHand.slice();
       const discarded  = riichiHand.splice(riichiState.discardSelection[0], 1)[0];
+
+      // 待ち牌の権威チェック: 確定した残り手牌＋待ち牌で辞書語が作れること（dictCheck ON時）
+      if (room.dictCheck && typeof isValidWord === 'function') {
+        for (const w of riichiState.waitingTiles) {
+          if (!canFormDictWord(riichiHand.concat([w]), isValidWord)) {
+            throw new Error('待ち牌「' + w + '」では辞書の単語が完成しません。捨て牌か待ち牌を見直してください');
+          }
+        }
+      }
+
       const pile       = (room.discardPile || []).concat([discarded]);
 
       const riichiFields = {

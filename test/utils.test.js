@@ -6,7 +6,7 @@ import {
   isHahaSomeWord, getVowelFlow, detectTourentan,
   initWinds, advanceWinds, getWindRowTiles,
   initDoraTiles, addKanDora, VOWEL_MAP, calcPonKanTempScore,
-  calcAgariScore, buildDrawResult, buildRoundResult
+  calcAgariScore, buildDrawResult, buildRoundResult, canFormDictWord
 } from '../public/js/utils.js';
 
 // 組を作るヘルパー（tiles配列からセットオブジェクトを生成）
@@ -423,5 +423,25 @@ describe('buildDrawResult（山切れ終局）', () => {
   it('勝者は ponKanScore 最大、winnerName に「（山切れ）」が付く', () => {
     expect(res.roundHistory[0].winnerName).toBe('Bob（山切れ）');
     expect(res.roundHistory[0].winnerScore).toBe(500);
+  });
+});
+
+describe('canFormDictWord（待ち牌検証用）', () => {
+  const dict = new Set(['ねこ', 'さくら']);
+  const isValid = w => dict.has(w);
+
+  it('並べ替えのいずれかが辞書語なら true', () => {
+    expect(canFormDictWord(['こ', 'ね'], isValid)).toBe(true);       // ねこ
+    expect(canFormDictWord(['ら', 'く', 'さ'], isValid)).toBe(true); // さくら
+  });
+
+  it('どの並びでも辞書語にならなければ false', () => {
+    expect(canFormDictWord(['あ', 'ぬ'], isValid)).toBe(false);
+    expect(canFormDictWord([], isValid)).toBe(false);
+  });
+
+  it('同じ牌が重複していても判定できる', () => {
+    const d2 = new Set(['ささみ']);
+    expect(canFormDictWord(['さ', 'み', 'さ'], w => d2.has(w))).toBe(true);
   });
 });
