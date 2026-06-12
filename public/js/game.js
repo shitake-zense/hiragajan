@@ -959,6 +959,31 @@ async function drawTile() {
   } catch (err) { console.error('drawTile:', err); showMsg('❌ ' + err.message); if (btn) btn.disabled = false; }
 }
 
+/**
+ * 捨て牌後の遷移フィールドを組み立てる（山切れ終局 or pon_window）。
+ * discardTile / submitRiichi が共有する。山が空なら全員 ponKanScore のみ確定で終局、
+ * そうでなければ下家にポンウィンドウを開く。
+ * プレイヤー固有フィールド（hand・立直フィールド）は呼び出し側で付与する。
+ * @returns {Object} Firestore update オブジェクト
+ */
+function buildDiscardTransition(room, discardBy, discardedTile, pile) {
+  if (room.deck.length === 0) {
+    // 山切れ終局: 全員ponKanScoreのみ確定（あがりではない）
+    const { totalScores, roundHistory } = buildDrawResult(room);
+    return {
+      discardPile: pile, lastDiscardBy: discardBy,
+      status: 'finished', ponWindow: null,
+      totalScores, roundHistory
+    };
+  }
+  const next = getNextPlayer(room.playerOrder, discardBy);
+  return {
+    discardPile: pile, lastDiscardBy: discardBy, currentTurn: next,
+    turnPhase: 'pon_window', status: 'playing',
+    ponWindow: { active: true, tile: discardedTile, discardedBy: discardBy, eligiblePlayer: next }
+  };
+}
+
 async function discardTile() {
   if (selectedIndices.length !== 1) { showMsg('捨てる牌を1枚選んでください'); return; }
   const btn = document.getElementById('discardBtn');
@@ -979,27 +1004,9 @@ async function discardTile() {
       }
       const discarded = hand.splice(selectedIndices[0], 1)[0];
       const pile      = (room.discardPile || []).concat([discarded]);
-      const next      = getNextPlayer(room.playerOrder, myPlayerId);
-      const empty     = room.deck.length === 0;
 
-      let upd;
-      if (empty) {
-        // 山切れ終局: 全員ponKanScoreのみ確定（あがりではない）
-        const { totalScores, roundHistory } = buildDrawResult(room);
-        upd = {
-          discardPile: pile, lastDiscardBy: myPlayerId,
-          status: 'finished', ponWindow: null,
-          totalScores, roundHistory
-        };
-        upd['players.' + myPlayerId + '.hand'] = hand;
-      } else {
-        upd = {
-          discardPile: pile, lastDiscardBy: myPlayerId, currentTurn: next,
-          turnPhase: 'pon_window', status: 'playing',
-          ponWindow: { active: true, tile: discarded, discardedBy: myPlayerId, eligiblePlayer: next }
-        };
-        upd['players.' + myPlayerId + '.hand'] = hand;
-      }
+      const upd = buildDiscardTransition(room, myPlayerId, discarded, pile);
+      upd['players.' + myPlayerId + '.hand'] = hand;
       t.update(roomRef, upd);
     });
     selectedIndices = [];
@@ -1333,8 +1340,6 @@ async function submitRiichi() {
       const riichiHand = riichiState.remainingHand.slice();
       const discarded  = riichiHand.splice(riichiState.discardSelection[0], 1)[0];
       const pile       = (room.discardPile || []).concat([discarded]);
-      const next       = getNextPlayer(room.playerOrder, myPlayerId);
-      const empty      = room.deck.length === 0;
 
       const riichiFields = {
         ['players.' + myPlayerId + '.hand']:         riichiHand,
@@ -1345,22 +1350,7 @@ async function submitRiichi() {
         ['players.' + myPlayerId + '.waitingTiles']: riichiState.waitingTiles
       };
 
-      let upd;
-      if (empty) {
-        // 山切れ終局: 全員ponKanScoreのみ確定（あがりではない）
-        const { totalScores, roundHistory } = buildDrawResult(room);
-        upd = Object.assign({
-          discardPile: pile, lastDiscardBy: myPlayerId,
-          status: 'finished', ponWindow: null,
-          totalScores, roundHistory
-        }, riichiFields);
-      } else {
-        upd = Object.assign({
-          discardPile: pile, lastDiscardBy: myPlayerId, currentTurn: next,
-          turnPhase: 'pon_window', status: 'playing',
-          ponWindow: { active: true, tile: discarded, discardedBy: myPlayerId, eligiblePlayer: next }
-        }, riichiFields);
-      }
+      const upd = Object.assign(buildDiscardTransition(room, myPlayerId, discarded, pile), riichiFields);
       t.update(roomRef, upd);
     });
     closeRiichiModal();
@@ -1416,6 +1406,29 @@ function confirmRiichiAgariOrder() {
   if (riichiAgariState.onConfirm) riichiAgariState.onConfirm(riichiAgariState.tiles.slice());
 }
 
+/**
+ * 立直あがり（ロン/ツモ共通）のスコア・履歴を計算する。
+ * finalSets構築 → ctx構築 → detectRoles → calcAgariScore → buildRoundResult をまとめる。
+ * validateAgari は通さない現仕様を維持（立直あがりは待ち牌自己申告のため）。
+ * プレイヤー固有の更新フィールド（hand/lockedSets/score）と wordLog・成功演出は呼び出し側に残す。
+ * @returns {{ finalSets:Array, roles:Array, newScore:number, totalScores:Object, roundHistory:Array }}
+ */
+function buildRiichiAgariResult(room, myData, orderedTiles) {
+  const fg        = { tiles: orderedTiles, word: orderedTiles.join(''), score: calcWordScore(orderedTiles), type: 'tsumo' };
+  const finalSets = (myData.lockedSets || []).concat(myData.riichiSets || []).concat([fg]);
+  const ctx       = {
+    lockedSets: myData.lockedSets || [], turnCount: room.turnCount || 0,
+    riichiAt: myData.riichiAt !== undefined ? myData.riichiAt : -1,
+    playerCount: room.playerOrder.length,
+    baWind: room.winds ? room.winds.ba : '',
+    myWind: room.winds ? (room.winds[myPlayerId] || '') : ''
+  };
+  const roles    = detectRoles(finalSets, true, ctx);
+  const newScore = calcAgariScore(myData, finalSets, roles, room.doraTiles || {});
+  const { totalScores, roundHistory } = buildRoundResult(room, myPlayerId, newScore, finalSets, roles);
+  return { finalSets, roles, newScore, totalScores, roundHistory };
+}
+
 async function executeRon(orderedTiles) {
   if (!currentRoom) return;
   try {
@@ -1426,18 +1439,7 @@ async function executeRon(orderedTiles) {
       const dictErr = checkDictWord(room, orderedTiles);
       if (dictErr) throw new Error(dictErr);
       const pile   = (room.discardPile || []).slice(); pile.pop();
-      const fg     = { tiles: orderedTiles, word: orderedTiles.join(''), score: calcWordScore(orderedTiles), type: 'tsumo' };
-      const finalSets = (myData.lockedSets || []).concat(myData.riichiSets || []).concat([fg]);
-      const ctx       = {
-        lockedSets: myData.lockedSets || [], turnCount: room.turnCount || 0,
-        riichiAt: myData.riichiAt !== undefined ? myData.riichiAt : -1,
-        playerCount: room.playerOrder.length,
-        baWind: room.winds ? room.winds.ba : '',
-        myWind: room.winds ? (room.winds[myPlayerId] || '') : ''
-      };
-      const roles     = detectRoles(finalSets, true, ctx);
-      const newScore  = calcAgariScore(myData, finalSets, roles, room.doraTiles || {});
-      const { totalScores, roundHistory } = buildRoundResult(room, myPlayerId, newScore, finalSets, roles);
+      const { finalSets, newScore, totalScores, roundHistory } = buildRiichiAgariResult(room, myData, orderedTiles);
       const wordLog = (room.wordLog || []).concat([{
         word: 'ロン「' + orderedTiles.join('') + '」', tiles: orderedTiles,
         type: 'ron', score: newScore, playerId: myPlayerId, playerName: myData.name, ts: Date.now()
@@ -1465,18 +1467,7 @@ async function executeTsumo(orderedTiles) {
       const myData = room.players[myPlayerId];
       const dictErr = checkDictWord(room, orderedTiles);
       if (dictErr) throw new Error(dictErr);
-      const fg     = { tiles: orderedTiles, word: orderedTiles.join(''), score: calcWordScore(orderedTiles), type: 'tsumo' };
-      const finalSets = (myData.lockedSets || []).concat(myData.riichiSets || []).concat([fg]);
-      const ctx       = {
-        lockedSets: myData.lockedSets || [], turnCount: room.turnCount || 0,
-        riichiAt: myData.riichiAt !== undefined ? myData.riichiAt : -1,
-        playerCount: room.playerOrder.length,
-        baWind: room.winds ? room.winds.ba : '',
-        myWind: room.winds ? (room.winds[myPlayerId] || '') : ''
-      };
-      const roles     = detectRoles(finalSets, true, ctx);
-      const newScore  = calcAgariScore(myData, finalSets, roles, room.doraTiles || {});
-      const { totalScores, roundHistory } = buildRoundResult(room, myPlayerId, newScore, finalSets, roles);
+      const { finalSets, newScore, totalScores, roundHistory } = buildRiichiAgariResult(room, myData, orderedTiles);
       const wordLog = (room.wordLog || []).concat([{ word: orderedTiles.join(''), tiles: orderedTiles, type: 'tsumo', score: newScore, playerId: myPlayerId, playerName: myData.name, ts: Date.now() }]);
       const upd = { status: 'finished', wordLog, roundHistory, totalScores };
       upd['players.' + myPlayerId + '.hand']       = [];
