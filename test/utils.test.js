@@ -4,7 +4,8 @@ import {
   validateAgari, detectRoles, calcRoleBonus,
   calcDoraBonus, calcDoraCount, calcSetsDora,
   isHahaSomeWord, getVowelFlow, detectTourentan,
-  initWinds, advanceWinds, getWindRowTiles
+  initWinds, advanceWinds, getWindRowTiles,
+  initDoraTiles, addKanDora, VOWEL_MAP
 } from '../public/js/utils.js';
 
 // 組を作るヘルパー（tiles配列からセットオブジェクトを生成）
@@ -97,6 +98,21 @@ describe('validateAgari', () => {
     const submitted = [set('さしす'), set('たちつ'), set('なにぬ')];
     const hand = 'さしすたちつなにぬ'.split('');
     expect(validateAgari(locked, submitted, hand)).toEqual({ valid: true });
+  });
+
+  it('カンを含む4文字ロック組でも5組ちょうどで成立する', () => {
+    const locked = [set('かんかん', 'kan')]; // カンで4文字組
+    const submitted = [set('あい'), set('かきく'), set('さしす'), set('たちつ')];
+    const hand = 'あいかきくさしすたちつ'.split('');
+    expect(validateAgari(locked, submitted, hand)).toEqual({ valid: true });
+  });
+
+  it('6組すべて2文字（七対子未満）は専用理由で不成立', () => {
+    const submitted = [set('あい'), set('かき'), set('さし'), set('たち'), set('なに'), set('はひ')];
+    const hand = 'あいかきさしたちなにはひ'.split('');
+    const r = validateAgari([], submitted, hand);
+    expect(r.valid).toBe(false);
+    expect(r.reason).toContain('七対子は7組必要');
   });
 });
 
@@ -264,5 +280,53 @@ describe('風システム', () => {
 describe('calcRoleBonus', () => {
   it('役スコアの合計', () => {
     expect(calcRoleBonus([{ score: 500 }, { score: 800 }])).toBe(1300);
+  });
+});
+
+describe('initDoraTiles', () => {
+  it('場風の段の牌のみ・最大2種・あいうえおは含まない', () => {
+    const aiueo = new Set(['あ', 'い', 'う', 'え', 'お']);
+    // 全母音段で繰り返し検証（ランダム選択のため複数回）
+    ['あ風', 'い風', 'う風', 'え風', 'お風'].forEach(baWind => {
+      const expectVowel = { 'あ風': 'a', 'い風': 'i', 'う風': 'u', 'え風': 'e', 'お風': 'o' }[baWind];
+      for (let n = 0; n < 20; n++) {
+        const dora = initDoraTiles(baWind);
+        const keys = Object.keys(dora);
+        expect(keys.length).toBeLessThanOrEqual(2); // 最大2種
+        keys.forEach(tile => {
+          expect(aiueo.has(tile)).toBe(false);        // あいうえおを含まない
+          expect(VOWEL_MAP[tile]).toBe(expectVowel);  // 場風の段の牌のみ
+        });
+      }
+    });
+  });
+
+  it('場風が不正なら空オブジェクト', () => {
+    expect(initDoraTiles('')).toEqual({});
+    expect(initDoraTiles('ん風')).toEqual({});
+  });
+});
+
+describe('addKanDora', () => {
+  it('呼び出し後にドラ枚数の合計が1増える', () => {
+    const before = { 'か': 1 };
+    const totalBefore = Object.values(before).reduce((s, v) => s + v, 0);
+    const after = addKanDora(before, 'あ風');
+    const totalAfter = Object.values(after).reduce((s, v) => s + v, 0);
+    expect(totalAfter).toBe(totalBefore + 1); // 新種追加 or 既存倍率アップのどちらでも合計+1
+  });
+
+  it('追加された牌は場風の段（あいうえお除く）', () => {
+    const after = addKanDora({}, 'あ風');
+    const keys = Object.keys(after);
+    expect(keys.length).toBe(1);
+    expect(VOWEL_MAP[keys[0]]).toBe('a');
+    expect(['あ', 'い', 'う', 'え', 'お']).not.toContain(keys[0]);
+  });
+
+  it('場風が不明なら変更しない', () => {
+    const before = { 'か': 1 };
+    expect(addKanDora(before, '')).toEqual(before);
+    expect(addKanDora(before, 'ん風')).toEqual(before);
   });
 });
