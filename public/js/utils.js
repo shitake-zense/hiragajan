@@ -203,6 +203,33 @@ function validateAgari(lockedSets, submittedSets, hand) {
   return { valid: true };
 }
 
+/**
+ * 牌の並べ替えのいずれかが辞書語になるか判定する（立直の待ち牌検証用）
+ * @param {string[]} tiles   - 判定する牌（立直の残り手牌＋待ち牌。高々4〜5枚を想定し全順列を試す）
+ * @param {Function} isValid - 単語判定関数（例: dictionary.js の isValidWord）
+ * @returns {boolean}
+ */
+function canFormDictWord(tiles, isValid) {
+  if (!tiles || tiles.length === 0) return false;
+  var found = false;
+  var permute = function(rest, acc) {
+    if (found) return;
+    if (rest.length === 0) {
+      if (isValid(acc.join(''))) found = true;
+      return;
+    }
+    var seen = {};
+    for (var i = 0; i < rest.length; i++) {
+      if (seen[rest[i]]) continue; // 同じ牌から始まる順列はスキップ（重複防止）
+      seen[rest[i]] = true;
+      var next = rest.slice(); next.splice(i, 1);
+      permute(next, acc.concat([rest[i]]));
+    }
+  };
+  permute(tiles.slice(), []);
+  return found;
+}
+
 console.log(`✅ utils.js 読み込み完了 | 牌総数: ${BASIC_SOUNDS.length * 2 + SPECIAL_SOUNDS.length}枚`);
 
 // ============================================================
@@ -921,6 +948,7 @@ if (typeof module !== 'undefined' && module.exports) {
     initWinds, advanceWinds, getWindRowTiles, initDoraTiles, addKanDora,
     shuffleArray, calcDoraBonus, calcDoraCount, calcSetsDora,
     calcAgariBreakdown, calcAgariScore, buildDrawResult, buildRoundResult,
+    canFormDictWord,
     VOWEL_MAP, ROW_MAP
   };
 }
