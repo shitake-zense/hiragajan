@@ -1,5 +1,7 @@
 # ひらがじゃん
 
+[![test](https://github.com/shitake-zense/hiragajan/actions/workflows/test.yml/badge.svg)](https://github.com/shitake-zense/hiragajan/actions/workflows/test.yml)
+
 ひらがな牌を集めて単語を作る、麻雀風の対戦単語ゲームです。
 スマホや PC のブラウザから、友達と同じルームに入って遊べます。
 
@@ -79,6 +81,8 @@ python -m http.server 8080
 - `public/js/dictionary.js`: 辞書チェック用の単語データ（自動生成・約26,000語）
 - `public/js/firebase-config.js`: Firebase 設定
 
+> **Note**: `firebase-config.js` の `apiKey` は意図的にコミットしています。Firebase の Web API キーは秘密情報ではなくプロジェクト識別子に近いもので、アクセス制御は Firestore セキュリティルール（`firestore.rules`）側で行っています。
+
 ### 辞書データの再生成
 
 `public/js/dictionary.js` は [JMdict](https://www.edrdg.org/jmdict/j_jmdict.html)（EDRDG・CC BY-SA 4.0）から
@@ -156,3 +160,13 @@ gcloud firestore fields ttls update expireAt \
 
 または Firebase コンソール → Firestore →「TTL」から `rooms` コレクションの
 `expireAt` フィールドを有効化してください。
+
+### リファクタリング計画
+
+技術的負債の棚卸しと改修計画は [docs/refactor-instructions.md](docs/refactor-instructions.md) にまとめています。
+負債ごとに根拠・影響範囲・検証方法を記録し、小さなブランチ単位で実施しています。
+
+## ライセンス
+
+このリポジトリのコードは [MIT License](LICENSE) です。
+ただし `public/js/dictionary.js` は [JMdict](https://www.edrdg.org/jmdict/j_jmdict.html)（EDRDG）由来のデータを含むため、CC BY-SA 4.0 の条件に従います。
