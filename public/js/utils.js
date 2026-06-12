@@ -321,12 +321,6 @@ function isHahaSomeWord(tiles) {
   return vowelTiles.every(function(c) { return VOWEL_MAP[c] === first; });
 }
 
-/**
- * 役を自動検出する
- * @param {Array}   allSets      - 全組（lockedSets + submittedSets）
- * @param {boolean} riichiActive - 立直宣言していたか
- * @returns {Array} [{id, name, score, desc}]
- */
 // ============================================================
 // 濁音・半濁音・あ行 判定セット
 // ============================================================
@@ -392,18 +386,6 @@ function getVowelFlow(tiles) {
   }).filter(function(v) { return v !== null; }).join('');
 }
 
-/**
- * 役を検出する
- * @param {Array}   allSets      - 全組
- * @param {boolean} riichiActive - 立直宣言していたか
- * @param {Object}  ctx          - 追加コンテキスト
- *   ctx.lockedSets   {Array}   - ポン/カン組（門前判定用）
- *   ctx.turnCount    {number}  - あがり時のturnCount
- *   ctx.riichiAt     {number}  - リーチ宣言時のturnCount (-1=未宣言)
- *   ctx.playerCount  {number}  - プレイヤー数（一発1巡の計算用）
- *   ctx.baWind       {string}  - 場風の名前（例: "え風"）
- *   ctx.myWind       {string}  - 自風の名前（例: "あ風"）
- */
 // ============================================================
 // 風・ドラシステム
 // ============================================================
@@ -598,6 +580,19 @@ function calcSetsDora(allSets, doraTiles, perDora) {
 }
 
 
+/**
+ * 役を自動検出する
+ * @param {Array}   allSets      - 全組（lockedSets + submittedSets）
+ * @param {boolean} riichiActive - 立直宣言していたか
+ * @param {Object}  ctx          - 追加コンテキスト
+ *   ctx.lockedSets   {Array}   - ポン/カン組（門前判定用）
+ *   ctx.turnCount    {number}  - あがり時のturnCount
+ *   ctx.riichiAt     {number}  - リーチ宣言時のturnCount (-1=未宣言)
+ *   ctx.playerCount  {number}  - プレイヤー数（一発1巡の計算用）
+ *   ctx.baWind       {string}  - 場風の名前（例: "え風"）
+ *   ctx.myWind       {string}  - 自風の名前（例: "あ風"）
+ * @returns {Array} [{id, name, score, desc}]
+ */
 function detectRoles(allSets, riichiActive, ctx) {
   ctx = ctx || {};
   var roles = [];
@@ -799,6 +794,104 @@ function calcRoleBonus(roles) {
 console.log("✅ 役システム 読み込み完了");
 
 // ============================================================
+// ラウンド集計・あがり点計算
+// （旧 game.js から移動。引数のみに依存するピュア関数）
+// ============================================================
+
+/**
+ * あがり時のスコア内訳を計算する
+ * ポン/カン仮加算分を差し引いて全組を文字数×100で再計算する。
+ * あがりモーダルのプレビューと calcAgariScore の両方がこれを使う（計算式の二重持ちを防ぐ）。
+ * @param {Object} myData    - Firestoreのプレイヤーデータ
+ * @param {Array}  finalSets - 全組
+ * @param {Array}  roles     - 検出された役
+ * @param {Object} doraTiles - 場風ドラ
+ * @returns {{ baseScore:number, roleBonus:number, doraBonus:number, prevScore:number, total:number }}
+ */
+function calcAgariBreakdown(myData, finalSets, roles, doraTiles) {
+  // 全組のベース点を文字数×100で計算（ロック組も含む）
+  const baseScore = finalSets.reduce((s, g) => s + calcWordScore(g.tiles || []), 0);
+  const roleBonus = calcRoleBonus(roles);
+  // ドラ500/枚（あがり時）
+  const doraBonus = calcSetsDora(finalSets, doraTiles || {}, 500);
+  // ポン/カン仮加算分（文字数仮点 + ドラ200）を差し引いて正規点数で上書き
+  const ponKanTemp = myData.ponKanScore || 0;
+  const prevScore  = myData.score - ponKanTemp;
+  const total      = prevScore + baseScore + roleBonus + doraBonus;
+  return { baseScore, roleBonus, doraBonus, prevScore, total };
+}
+
+/**
+ * あがり時の最終スコアを返す（calcAgariBreakdown の total の薄いラッパー）
+ * @returns {number} 最終的なスコア（0以上）
+ */
+function calcAgariScore(myData, finalSets, roles, doraTiles) {
+  return calcAgariBreakdown(myData, finalSets, roles, doraTiles).total;
+}
+
+/**
+ * 山切れ終局時のスコア・履歴計算
+ * あがりではないので全員 ponKanScore のみ確定。正規化なし。
+ */
+function buildDrawResult(room) {
+  const currentRound = room.currentRound || 1;
+  const roundScores  = {};
+  room.playerOrder.forEach(pid => {
+    // 山切れ時は全プレイヤーのポン/カン仮加算のみ確定
+    roundScores[pid] = room.players[pid].ponKanScore || 0;
+  });
+  const totalScores = Object.assign({}, room.totalScores || {});
+  room.playerOrder.forEach(pid => {
+    totalScores[pid] = (totalScores[pid] || 0) + (roundScores[pid] || 0);
+  });
+  // 勝者は現在スコア（ponKanScore込み）が最大のプレイヤー
+  const winnerId = room.playerOrder.slice().sort((a, b) =>
+    (roundScores[b] || 0) - (roundScores[a] || 0)
+  )[0];
+  const roundHistory = (room.roundHistory || []).concat([{
+    round: currentRound,
+    winnerId,
+    winnerName: room.players[winnerId].name + '（山切れ）',
+    winnerScore: roundScores[winnerId] || 0,
+    words: [], roles: [], scores: roundScores,
+    doraCount: 0, doraDetail: [], doraBonus: 0
+  }]);
+  return { roundScores, totalScores, roundHistory };
+}
+
+/** ラウンド終了時のスコア・履歴計算（あがり共通） */
+function buildRoundResult(room, winnerId, winnerScore, finalSets, roles) {
+  const currentRound = room.currentRound || 1;
+  const roundScores  = {};
+  room.playerOrder.forEach(pid => {
+    if (pid === winnerId) {
+      // あがったプレイヤー：calcAgariScoreで算出したwinnerScoreを使用
+      roundScores[pid] = winnerScore;
+    } else {
+      // あがれなかったプレイヤー：ポン/カン仮加算（ponKanScore）のみ確定
+      // ※仕様: ポン/カンは試合中の点数として残るが、正規化（文字数×100）はされない
+      roundScores[pid] = room.players[pid].ponKanScore || 0;
+    }
+  });
+  const totalScores = Object.assign({}, room.totalScores || {});
+  room.playerOrder.forEach(pid => { totalScores[pid] = (totalScores[pid] || 0) + (roundScores[pid] || 0); });
+  const roundWords = finalSets.map(s => ({
+    tiles: s.tiles || [], word: s.word || (s.tiles || []).join(''),
+    score: (s.score != null) ? s.score : calcWordScore(s.tiles || []), type: s.type || 'tsumo'
+  }));
+  const doraInfo  = calcDoraCount(finalSets, room.doraTiles || {});
+  const doraCount  = doraInfo.count;
+  const doraDetail = doraInfo.detail;
+  const doraBonus  = calcSetsDora(finalSets, room.doraTiles || {}, 500);
+  const roundHistory = (room.roundHistory || []).concat([{
+    round: currentRound, winnerId, winnerName: room.players[winnerId].name,
+    winnerScore, words: roundWords, roles, scores: roundScores, doraCount, doraDetail, doraBonus
+  }]);
+  return { roundScores, totalScores, roundHistory };
+}
+
+
+// ============================================================
 // テスト用エクスポート（ブラウザでは無視される）
 // ============================================================
 if (typeof module !== 'undefined' && module.exports) {
@@ -810,6 +903,7 @@ if (typeof module !== 'undefined' && module.exports) {
     hasDuplicateChar, getVowelFlow, detectRoles, calcRoleBonus,
     initWinds, advanceWinds, getWindRowTiles, initDoraTiles, addKanDora,
     shuffleArray, calcDoraBonus, calcDoraCount, calcSetsDora,
+    calcAgariBreakdown, calcAgariScore, buildDrawResult, buildRoundResult,
     VOWEL_MAP, ROW_MAP
   };
 }
