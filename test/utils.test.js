@@ -5,7 +5,7 @@ import {
   calcDoraBonus, calcDoraCount, calcSetsDora,
   isHahaSomeWord, getVowelFlow, detectTourentan,
   initWinds, advanceWinds, getWindRowTiles,
-  initDoraTiles, addKanDora, VOWEL_MAP,
+  initDoraTiles, addKanDora, VOWEL_MAP, calcPonKanTempScore,
   calcAgariScore, buildDrawResult, buildRoundResult
 } from '../public/js/utils.js';
 
@@ -335,6 +335,21 @@ describe('addKanDora', () => {
     const before = { 'か': 1 };
     expect(addKanDora(before, '')).toEqual(before);
     expect(addKanDora(before, 'ん風')).toEqual(before);
+  });
+});
+
+describe('calcPonKanTempScore（ポン/カン仮加算）', () => {
+  it('(文字数-1)×100', () => {
+    expect(calcPonKanTempScore(['か', 'き', 'く'])).toBe(200);     // ポン3文字
+    expect(calcPonKanTempScore(['か', 'き', 'く', 'け'])).toBe(300); // カン4文字
+  });
+
+  it('仮加算はあがり時に正規点へ再計算される（ポン200点→組300点）', () => {
+    const ponTiles = ['か', 'き', 'く'];
+    const myData = { score: calcPonKanTempScore(ponTiles), ponKanScore: calcPonKanTempScore(ponTiles) };
+    const sets = [set('かきく', 'pon'), set('さしす'), set('たちつ'), set('なにぬ'), set('ねのは')];
+    // 仮加算200点は差し引かれ、全15文字×100 = 1500点で確定する
+    expect(calcAgariScore(myData, sets, [], {})).toBe(1500);
   });
 });
 

@@ -1041,7 +1041,7 @@ async function kanTiles() {
       for (let i = 0; i < tiles.length - 3; i++) { if (deck.length > 0) extra.push(deck.pop()); }
       const word     = tiles.join('');
       const score    = calcWordScore(tiles);           // あがり時用（文字数×100）
-      const tempScore = (tiles.length - 1) * 100;     // 仮加算（文字数-1）×100
+      const tempScore = calcPonKanTempScore(tiles);   // 仮加算（文字数-1）×100
       const upd = {
         deck, turnPhase: 'discard',
         wordLog: (room.wordLog || []).concat([{ word, tiles, type: 'kan', score: tempScore, playerId: myPlayerId, playerName: room.players[myPlayerId].name, ts: Date.now() }])
@@ -1051,7 +1051,7 @@ async function kanTiles() {
         ? addKanDora(room.doraTiles || {}, room.winds.ba)
         : (room.doraTiles || {});
       // ドラ仮加算 (200/枚)
-      const doraTemp = calcDoraBonus(tiles, updatedDora, 200);
+      const doraTemp = calcDoraBonus(tiles, updatedDora, DORA_BONUS_TEMP);
       const totalTemp = tempScore + doraTemp;
       upd['players.' + myPlayerId + '.hand']        = hand.concat(extra);
       upd['players.' + myPlayerId + '.lockedSets']  = (room.players[myPlayerId].lockedSets || []).concat([{ tiles, word, type: 'kan', score }]);
@@ -1150,13 +1150,13 @@ async function lockPonWord() {
       if (dictErr) throw new Error(dictErr);
       const word      = tiles.join('');
       const score     = calcWordScore(tiles);       // あがり時用（文字数×100）
-      const tempScore = (tiles.length - 1) * 100;  // 仮加算（文字数-1）×100 → ポンは200点
+      const tempScore = calcPonKanTempScore(tiles); // 仮加算（文字数-1）×100 → ポンは200点
       selectedIndices.slice().sort((a, b) => b - a).forEach(i => hand.splice(i, 1));
       const upd = {
         turnPhase: 'discard', ponWindow: { active: false, tile: null, discardedBy: null, eligiblePlayer: null },
         wordLog: (room.wordLog || []).concat([{ word, tiles, type: 'pon', score: tempScore, playerId: myPlayerId, playerName: room.players[myPlayerId].name, ts: Date.now() }])
       };
-      const doraTemp2  = calcDoraBonus(tiles, room.doraTiles || {}, 200);
+      const doraTemp2  = calcDoraBonus(tiles, room.doraTiles || {}, DORA_BONUS_TEMP);
       const totalTemp2 = tempScore + doraTemp2;
       upd['players.' + myPlayerId + '.hand']        = hand;
       upd['players.' + myPlayerId + '.lockedSets']  = (room.players[myPlayerId].lockedSets || []).concat([{ tiles, word, type: 'pon', score }]);

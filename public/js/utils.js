@@ -109,12 +109,29 @@ function generateRoomId() {
 }
 
 // ============================================================
-// スコア計算（暫定: 文字数＝点数）
-// TODO: スコアルール確定後に修正する
+// 点数ルール（現行: 文字数×100）
+// 将来バランス調整の可能性あり。変更時はこのセクションの定数・関数のみ修正する。
 // ============================================================
 
+/** 単語点: 1文字あたりの点数 */
+const SCORE_PER_TILE = 100;
+/** あがり時のドラ1枚あたりの点数 */
+const DORA_BONUS_AGARI = 500;
+/** ポン/カン仮加算時のドラ1枚あたりの点数 */
+const DORA_BONUS_TEMP = 200;
+
+/** 単語点: 文字数×SCORE_PER_TILE */
 function calcWordScore(tiles) {
-  return tiles.length * 100; // ×100倍
+  return tiles.length * SCORE_PER_TILE;
+}
+
+/**
+ * ポン/カン時の仮加算点: (文字数-1)×SCORE_PER_TILE
+ * あがり時に calcAgariBreakdown が ponKanScore ごと差し引き、
+ * calcWordScore の正規点で再計算する（二段階スコア計算）
+ */
+function calcPonKanTempScore(tiles) {
+  return (tiles.length - 1) * SCORE_PER_TILE;
 }
 
 // ============================================================
@@ -812,8 +829,8 @@ function calcAgariBreakdown(myData, finalSets, roles, doraTiles) {
   // 全組のベース点を文字数×100で計算（ロック組も含む）
   const baseScore = finalSets.reduce((s, g) => s + calcWordScore(g.tiles || []), 0);
   const roleBonus = calcRoleBonus(roles);
-  // ドラ500/枚（あがり時）
-  const doraBonus = calcSetsDora(finalSets, doraTiles || {}, 500);
+  // あがり時ドラ（DORA_BONUS_AGARI/枚）
+  const doraBonus = calcSetsDora(finalSets, doraTiles || {}, DORA_BONUS_AGARI);
   // ポン/カン仮加算分（文字数仮点 + ドラ200）を差し引いて正規点数で上書き
   const ponKanTemp = myData.ponKanScore || 0;
   const prevScore  = myData.score - ponKanTemp;
@@ -882,7 +899,7 @@ function buildRoundResult(room, winnerId, winnerScore, finalSets, roles) {
   const doraInfo  = calcDoraCount(finalSets, room.doraTiles || {});
   const doraCount  = doraInfo.count;
   const doraDetail = doraInfo.detail;
-  const doraBonus  = calcSetsDora(finalSets, room.doraTiles || {}, 500);
+  const doraBonus  = calcSetsDora(finalSets, room.doraTiles || {}, DORA_BONUS_AGARI);
   const roundHistory = (room.roundHistory || []).concat([{
     round: currentRound, winnerId, winnerName: room.players[winnerId].name,
     winnerScore, words: roundWords, roles, scores: roundScores, doraCount, doraDetail, doraBonus
@@ -897,7 +914,8 @@ if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     BASIC_SOUNDS, SPECIAL_SOUNDS, INITIAL_HAND_SIZE, WIN_SET_COUNT,
     createShuffledDeck, drawTilesFromDeck, generateRoomId,
-    calcWordScore, getNextPlayer, validateAgari,
+    calcWordScore, calcPonKanTempScore, getNextPlayer, validateAgari,
+    SCORE_PER_TILE, DORA_BONUS_AGARI, DORA_BONUS_TEMP,
     detectTourentan, isHahaSomeWord, hasDakuten, isDandakubo, hasYoon,
     hasDuplicateChar, getVowelFlow, detectRoles, calcRoleBonus,
     initWinds, advanceWinds, getWindRowTiles, initDoraTiles, addKanDora,
