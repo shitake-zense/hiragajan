@@ -647,6 +647,16 @@ html, body {
 }
 .rules-tab-active { background: rgba(108,99,255,.15); border-color: var(--accent-dim); color: var(--accent-text); }
 .rules-content { overflow-y: auto; flex: 1; }
+.dict-search-row { display: flex; gap: 8px; margin: 10px 0; }
+.dict-search-input {
+  flex: 1; min-width: 0; padding: 10px 12px; border-radius: var(--r-sm);
+  background: var(--surface); border: 1px solid var(--border);
+  color: var(--text-1); font-family: var(--font); font-size: 1rem;
+}
+.dict-search-input:focus { outline: none; border-color: var(--accent-dim); }
+.dict-search-result { font-size: .9rem; font-weight: 700; min-height: 1.4em; margin-top: 6px; }
+.dict-search-ok { color: var(--accent-text); }
+.dict-search-ng { color: var(--text-2); }
 .rules-section { margin-bottom: 14px; }
 .rules-section-title { font-size: .88rem; font-weight: 700; margin-bottom: 6px; padding-bottom: 4px; border-bottom: 1px solid var(--border); }
 .rules-text { font-size: .84rem; color: var(--text-2); line-height: 1.7; }

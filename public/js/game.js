@@ -154,6 +154,15 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
 
+  // 辞書検索（ルールモーダルの「辞書検索」タブ）
+  on('dictSearchBtn', runDictSearch);
+  const dictSearchInput = document.getElementById('dictSearchInput');
+  if (dictSearchInput) {
+    dictSearchInput.addEventListener('keydown', e => {
+      if (e.key === 'Enter') { e.preventDefault(); runDictSearch(); }
+    });
+  }
+
   startRoomListener();
 });
 
@@ -2003,6 +2012,35 @@ function renderStandingsModal(room) {
 
 function openRulesModal()  { setVisible('rulesModal', true); }
 function closeRulesModal() { setVisible('rulesModal', false); }
+
+/**
+ * 辞書検索: 入力語が辞書に登録されているか完全一致で判定して表示する。
+ * 入力はカタカナ→ひらがなに正規化（toHiraganaWord）。表示は textContent のみ（XSS安全）。
+ */
+function runDictSearch() {
+  const input  = document.getElementById('dictSearchInput');
+  const result = document.getElementById('dictSearchResult');
+  if (!input || !result) return;
+  const word = (typeof toHiraganaWord === 'function')
+    ? toHiraganaWord(input.value)
+    : String(input.value || '').trim();
+  result.classList.remove('dict-search-ok', 'dict-search-ng');
+  if (!word) {
+    result.textContent = '単語を入力してください';
+    return;
+  }
+  if (typeof isValidWord !== 'function') {
+    result.textContent = '辞書を読み込めませんでした';
+    return;
+  }
+  if (isValidWord(word)) {
+    result.textContent = '✅ 「' + word + '」は辞書にあります';
+    result.classList.add('dict-search-ok');
+  } else {
+    result.textContent = '❌ 「' + word + '」は見つかりません';
+    result.classList.add('dict-search-ng');
+  }
+}
 
 // ============================================================
 // 再戦処理
