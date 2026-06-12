@@ -125,6 +125,12 @@ describe('detectRoles - 基本役', () => {
     expect(roles.find(r => r.id === 'chiitoi')).toBeTruthy();
   });
 
+  it('2文字×5組は七対子にならない（七対子は7組のみ）', () => {
+    const sets = [set('あい'), set('かき'), set('さし'), set('たち'), set('なに')];
+    const roles = detectRoles(sets, false, {});
+    expect(roles.find(r => r.id === 'chiitoi')).toBeFalsy();
+  });
+
   it('門前自摸: 鳴きなし非立直のツモであがり', () => {
     const sets = [set('あい'), set('かきく'), set('さしす'), set('たちつ'), set('なにぬ')];
     const roles = detectRoles(sets, false, { lockedSets: [] });
@@ -178,8 +184,8 @@ describe('detectRoles - 母音・文字パターン役', () => {
     expect(roles.find(r => r.id === 'doutankiki')).toBeTruthy();
   });
 
-  // 注意: 5組すべてが2文字だと detectRoles は七対子と判定し、これらの役の
-  //       閾値が変わる（断濁母は七対子時は無効）。3文字組を混ぜて回避する。
+  // 注意: 七対子（7組×2文字）の場合はこれらの役の閾値が上がる
+  //       （断濁母は七対子時は無効）。ここでは通常の5組で検証する。
   it('混濁母: 濁音・半濁音を含む組が3組以上', () => {
     const sets = [set('がぎ'), set('ざじ'), set('だぢ'), set('かきく'), set('さしす')];
     const roles = detectRoles(sets, false, {});

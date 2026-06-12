@@ -597,8 +597,8 @@ function detectRoles(allSets, riichiActive, ctx) {
   ctx = ctx || {};
   var roles = [];
 
-  // 七対子: 5組または7組すべてが2文字
-  var allTwo = (allSets.length === WIN_SET_COUNT || allSets.length === 7) &&
+  // 七対子: 7組すべてが2文字の場合のみ（5組×2文字は通常あがり扱いで七対子にはしない）
+  var allTwo = allSets.length === 7 &&
     allSets.every(function(s) { return s.tiles.length === 2; });
   var isChiitoi = allTwo;
   if (allTwo) {
@@ -889,7 +889,6 @@ function buildRoundResult(room, winnerId, winnerScore, finalSets, roles) {
   }]);
   return { roundScores, totalScores, roundHistory };
 }
-
 
 // ============================================================
 // テスト用エクスポート（ブラウザでは無視される）
