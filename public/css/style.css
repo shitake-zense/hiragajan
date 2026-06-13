@@ -647,7 +647,8 @@ html, body {
 }
 .rules-tab-active { background: rgba(108,99,255,.15); border-color: var(--accent-dim); color: var(--accent-text); }
 .rules-content { overflow-y: auto; flex: 1; }
-.dict-search-row { display: flex; gap: 8px; margin: 10px 0; }
+.dict-search-row { display: flex; gap: 8px; margin: 10px 0; align-items: stretch; }
+.dict-search-row .btn { flex: 0 0 auto; width: auto; margin-bottom: 0; }
 .dict-search-input {
   flex: 1; min-width: 0; padding: 10px 12px; border-radius: var(--r-sm);
   background: var(--surface); border: 1px solid var(--border);
