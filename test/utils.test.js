@@ -6,7 +6,8 @@ import {
   isHahaSomeWord, getVowelFlow, detectTourentan,
   initWinds, advanceWinds, getWindRowTiles,
   initDoraTiles, addKanDora, VOWEL_MAP, calcPonKanTempScore,
-  calcAgariScore, buildDrawResult, buildRoundResult, canFormDictWord
+  calcAgariScore, buildDrawResult, buildRoundResult, canFormDictWord,
+  toHiraganaWord
 } from '../public/js/utils.js';
 
 // 組を作るヘルパー（tiles配列からセットオブジェクトを生成）
@@ -443,5 +444,27 @@ describe('canFormDictWord（待ち牌検証用）', () => {
   it('同じ牌が重複していても判定できる', () => {
     const d2 = new Set(['ささみ']);
     expect(canFormDictWord(['さ', 'み', 'さ'], w => d2.has(w))).toBe(true);
+  });
+});
+
+describe('toHiraganaWord', () => {
+  it('片仮名を平仮名に変換する', () => {
+    expect(toHiraganaWord('サカナ')).toBe('さかな');
+    expect(toHiraganaWord('ラーメン')).toBe('らーめん'); // 「ー」は保持
+  });
+
+  it('前後の空白を除去する', () => {
+    expect(toHiraganaWord('  ねこ  ')).toBe('ねこ');
+    expect(toHiraganaWord('\tサカナ\n')).toBe('さかな');
+  });
+
+  it('平仮名・片仮名混在を平仮名に揃える', () => {
+    expect(toHiraganaWord('さカな')).toBe('さかな');
+  });
+
+  it('空文字・null・undefined は空文字を返す', () => {
+    expect(toHiraganaWord('')).toBe('');
+    expect(toHiraganaWord(null)).toBe('');
+    expect(toHiraganaWord(undefined)).toBe('');
   });
 });

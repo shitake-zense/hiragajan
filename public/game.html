@@ -20,8 +20,9 @@
     <div class="card">
       <h2 class="card-title">ルームID</h2>
       <div class="room-id-display" id="roomIdDisplay">------</div>
-      <p class="card-desc" style="text-align:center">このIDを相手に送ってください</p>
-      <button id="copyRoomIdBtn" class="btn btn-secondary">コピー</button>
+      <p class="card-desc" style="text-align:center">このIDか参加リンクを相手に送ってください</p>
+      <button id="copyJoinLinkBtn" class="btn btn-primary">参加リンクをコピー</button>
+      <button id="copyRoomIdBtn" class="btn btn-secondary">IDをコピー</button>
     </div>
     <div class="card">
       <h2 class="card-title">参加者</h2>
@@ -268,6 +269,7 @@
         <button class="rules-tab" data-tab="roles">役一覧</button>
         <button class="rules-tab" data-tab="score">点数表</button>
         <button class="rules-tab" data-tab="dora">ドラ・風</button>
+        <button class="rules-tab" data-tab="search">辞書検索</button>
       </div>
 
       <div id="tab-basic" class="rules-content">
@@ -403,6 +405,20 @@
             <tr><td>ポン・カン時（仮加算）</td><td>+200点</td></tr>
             <tr><td>あがり時（全組合計）</td><td>+500点</td></tr>
           </table>
+        </div>
+      </div>
+
+      <div id="tab-search" class="rules-content hidden">
+        <div class="rules-section">
+          <div class="rules-section-title">辞書検索</div>
+          <p class="rules-text">単語が辞書に登録されているか調べられます。カタカナで入力してもひらがなに変換して検索します。</p>
+          <div class="dict-search-row">
+            <input id="dictSearchInput" class="dict-search-input" type="text"
+                   inputmode="kana" maxlength="20" placeholder="例: さかな"
+                   autocomplete="off" autocapitalize="off">
+            <button id="dictSearchBtn" class="btn btn-secondary">検索</button>
+          </div>
+          <p id="dictSearchResult" class="dict-search-result"></p>
         </div>
       </div>
 

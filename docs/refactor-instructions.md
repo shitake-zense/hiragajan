@@ -1,71 +1,87 @@
-# refactor-instructions.md ― ひらがじゃん リファクタリング指示書
+# refactor-instructions.md ― ひらがじゃん 機能追加 兼 リファクタ指示書（第2期）
 
-> この指示書は実装担当モデル向け。**既存仕様を壊さず、負債を減らし、今後変更しやすい状態にする**ことが目的。
+> この指示書は実装担当モデル向け。**既存仕様を壊さず、3つの新機能を安全に追加し、その周辺の負債だけを減らす**ことが目的。
 > 見た目の綺麗さや全面書き換えは目的ではない。証拠なく大きな削除・書き換えをしないこと。
+>
+> **第1期のリファクタ（点数計算の統一・テスト整備・七対子修正・待ち牌辞書検証など）は完了済み**で、その記録は git 履歴（`f6e9054` 周辺のコミットと、本ファイルの過去バージョン）に残っている。本ファイルは**第2期＝新機能追加**の指示書として置き換えたもの。第1期の Debt Map（D1〜D15）はすべて実装済み・マージ済みなので再着手しないこと。
 
 ---
 
 ## Objective
 
-1. ゲームロジック（点数計算・ラウンド集計）の重複と散在を減らし、単一の計算経路に統一する
-2. テスト不能だったピュア関数をテスト可能にし、ユニットテストの安全網を広げる
-3. 明白な死コード・重複定義・迷子コメントを除去する
-4. 人間が明示承認した修正のみ実装する: passPon フェーズガード（D8）、七対子は7組のみ（D14）、待ち牌の辞書検証（D15）、点数定数の集約（D13）
-5. 上記を**1フェーズ＝1コミット相当の小さな単位**で、各フェーズ後に検証しながら行う
+人間が承認した次の3機能を、既存挙動を壊さず小さなフェーズで追加する。
 
-やらないこと: Firebase SDK 移行、レンダリング方式の変更、`var`/`let`/`const` の一括統一、上記4以外の仕様変更（→ Out-of-scope 参照）。
+1. **F1: 共有URLでの参加** — 現在はルームIDをコピーして口頭/チャットで渡すのみ。**URL（`index.html?room=XXXXXX`）を共有すると参加フォームにIDが自動入力される**ようにする。
+2. **F2: 辞書の拡充** — 現在約26,632語（常用語＝優先度タグ付きのみ）。`tools/build-dictionary.mjs` の抽出フィルタを**段階的に緩和**し、和製英語・カタカナ語・一般語義タグ付きの通常語まで収録範囲を広げる。稀語・古語・専門タグは除外する。
+3. **F3: ゲーム画面の辞書内検索** — 入力した単語が辞書に登録されているかをゲーム画面で検索できるUIを、**ルールモーダルの「辞書検索」タブ**として追加する。
+
+副次目的: 上記の作業で触れるファイル周辺にある明白な負債（タイプミスのセレクタ等）だけを、無関係な整形を避けつつ最小限で直す。
+
+やらないこと: Firebase SDK 移行、レンダリング方式の変更、`var`/`let`/`const` の一括統一、サーバー権威化、`firestore.rules`/`database.rules.json` の変更（→ Out-of-scope 参照）。
+
+---
+
+## 実装前の確認事項と回答（記録・全問回答済み）
+
+> 人間が回答済み（2026-06-12）。**未回答の質問は残っていない**。実装中に新たな疑義が生じた場合は Stop And Ask Conditions に従うこと。
+
+- **Q1（F2 辞書の範囲）**: どこまで拡充するか → **回答: 「フィルタを段階的に緩和（中間）」**。⇒ 優先度タグ必須を撤廃しつつ、一般語義タグ（名詞/形容詞/和製英語など通常の語）を持つエントリを採用し、稀語・古語・廃語・専門/固有名詞系タグは除外する。「最大（全部入り）」でも「外部辞書追加」でもない。実装は Phase 5 / D-F2 参照。
+- **Q2（F1 共有URLの動線）**: 共有URLを開いた相手をどこへ導くか → **回答: 「ロビーに room を引き継ぎ事前入力」**。⇒ 共有URLは `index.html?room=XXXXXX` を指し、ロビーの参加フォームにIDを自動入力する。相手は名前を入れて従来どおり参加する。**自動入室はしない**（名前未入力の分岐を増やさない）。実装は Phase 3 / D-F1 参照。
+- **Q3（F3 検索UIの配置）**: 辞書内検索UIをどこに置くか → **回答: 「ルールモーダルに『辞書検索』タブ追加」**。⇒ 既存の `rules-tab` 仕組み（基本/役一覧/点数表/ドラ・風）に1タブ足す。新規ボタン/モーダルは作らない。実装は Phase 4 / D-F3 参照。
 
 ---
 
 ## Project Understanding
 
-- **何のプロジェクトか**: 「ひらがじゃん」— ひらがな牌120枚で単語を作る麻雀風リアルタイム対戦ゲーム（2〜4人）。ビルド不要の静的サイト（素のHTML/CSS/JS）+ Firebase Firestore。サーバーコードは存在しない。
-- **ユーザー体験**: ロビー（`public/index.html` + `lobby.js`）でルーム作成/参加 → ゲーム画面（`public/game.html` + `game.js`）で対戦。全プレイヤーが Firestore の単一ドキュメント `rooms/{roomId}` を `onSnapshot` で購読し、操作は `runTransaction` で書き込む。**状態の権威はクライアント側**。
-- **エントリーポイント**: 各HTMLが `<script>` で順にロードするグローバル共有方式（ESモジュールではない）。
+- **何のプロジェクトか**: 「ひらがじゃん」— ひらがな牌120枚で単語を作る麻雀風リアルタイム対戦ゲーム（2〜4人）。ビルド不要の静的サイト（素のHTML/CSS/JS）+ Firebase Firestore。**サーバーコードは存在しない**（クライアント権威設計）。
+- **ユーザー体験 / ワークフロー**:
+  - ロビー（`public/index.html` + `lobby.js`）で名前を入れ、ルーム作成 or ルームIDで参加 → ゲーム画面（`public/game.html` + `game.js`）。
+  - 全プレイヤーが Firestore の単一ドキュメント `rooms/{roomId}` を `onSnapshot` で購読し、操作は `runTransaction` で書き込む。`renderGame()` が毎スナップショットで全UIを再構築。
+  - **F1 はこのロビー入口の動線にIDの引き継ぎを足すだけで、ゲーム本体には触れない。**
+- **エントリーポイント**（各HTMLが `<script>` で順ロードするグローバル共有方式。ESモジュールではない）:
   - `game.html`: firebase CDN(compat 9.22.0) → `firebase-config.js` → `utils.js` → `dictionary.js` → `game.js`
-  - `index.html`: firebase CDN → `firebase-config.js` → `utils.js` → `lobby.js`（辞書はロビーでは読み込まない）
+  - `index.html`: firebase CDN → `firebase-config.js` → `utils.js` → `lobby.js`（**辞書はロビーでは読み込まない**。F3 がゲーム画面限定なのはこのため）
 - **主要モジュールと責務**:
   - `public/js/firebase-config.js`(36行) — Firebase初期化、グローバル `db` 公開、iOS向けロングポーリング自動検出
-  - `public/js/utils.js`(816行) — 牌定義・山札・あがり判定 `validateAgari()`・役検出 `detectRoles()`・ドラ/風システム。ほぼピュア関数。末尾の `module.exports` で vitest からインポート可能
-  - `public/js/lobby.js`(148行) — ルーム作成/参加。ルームドキュメントの初期スキーマは `createRoomBtn` ハンドラと `makePlayerData()` にある
-  - `public/js/game.js`(2087行) — ゲーム進行のすべて。`renderGame()` が毎スナップショットで全UIを再構築
-  - `public/js/dictionary.js` — **自動生成**（`tools/build-dictionary.mjs` がJMdictから生成、約26,000語）。`isValidWord()` を提供。**手で編集禁止**
-- **データフロー**: ローカルUI状態（`selectedIndices`, `localHandDisplay`, 各モーダル state）は Firestore に書かず、`renderGame()` がラウンド/ステータス変化を検知してリセット。Firestore 更新はドット記法のフィールドパス（`'players.' + pid + '.hand'`）。
+  - `public/js/utils.js`(約940行) — 牌定義・山札・あがり判定・役検出・ドラ/風・点数定数・集計関数（第1期で移設）。`getOrCreatePlayerId()`(51)/`getPlayerName()`(61)/`generateRoomId()`(107) などロビー共通関数もここ。ほぼピュア関数。末尾 `module.exports`(940) で vitest からインポート可能。**F3 の文字正規化純関数はここに追加する**
+  - `public/js/lobby.js`(148行) — ルーム作成/参加。作成は `createRoomBtn` ハンドラ(46)、参加は `joinRoomBtn` ハンドラ(88)、`makePlayerData()`(133)。**F1 はここに room 事前入力を足す**
+  - `public/js/game.js`(約2090行) — ゲーム進行のすべて。`?room=` 読み取り(75-77)、待機画面のID表示(79-80)・コピー(`copyRoomId` 1861)、辞書チェック `checkDictWord`(332)、`escapeHtml`(341)、`makeTile`(1836)、`setVisible`(1851)。**F1 の共有リンクボタンと F3 の検索ハンドラはここに足す**
+  - `public/js/dictionary.js` — **自動生成**（`tools/build-dictionary.mjs` がJMdictから生成）。`isValidWord(word)` を提供。**手で編集禁止**。**F2 は生成スクリプトを変えて再生成する**
+  - `tools/build-dictionary.mjs` — 辞書生成スクリプト。優先度タグフィルタ(85)、牌制約 `isFormable`(59)、片仮名→平仮名 `kataToHira`(53)。**F2 の本体**
+- **データフロー**: ローカルUI状態（`selectedIndices` 等）は Firestore に書かず、`renderGame()` がラウンド/ステータス変化で初期化。Firestore 更新はドット記法のフィールドパス（`'players.' + pid + '.hand'`）。
 - **状態機械**: `turnPhase`: `draw` → `discard` → `pon_window` → (`pon_acquired` → `discard`) | `draw`。プレイヤーIDは `sessionStorage` 生成（タブごとに別人）。
-- **二段階スコア計算（最重要）**: ポン/カンは仮加算 `ponKanScore`（(文字数-1)×100 + ドラ200/枚）を `score` に乗せ、あがり時に `calcAgariScore()`（game.js:870）が仮加算を差し引いて正規点（文字数×100 + 役 + ドラ500/枚）で再計算する。
-- **外部依存**: Firebase Firestore（compat SDK 9.22.0, CDN）、JMdict（辞書生成時のみ）。Realtime Database は**未使用**（`database.rules.json` で全面拒否済み。`firebase-config.js` の `databaseURL` は残置で良い）。
-- **セキュリティ境界**: `firestore.rules` が作成/更新時の構造検証（`playerOrder` 縮小禁止、`status` 3値、`roomId`/`createdAt`/`dictCheck` 不変、削除禁止）。XSS対策はユーザー由来文字列への `escapeHtml()` 適用。
-- **テスト**: vitest（`test/utils.test.js` 37件、`test/dictionary.test.js` 7件、計44件、現在全て成功）。ピュア関数のみ対象。Lint・CI・typecheck は存在しない。
+- **外部依存**: Firebase Firestore（compat SDK 9.22.0, CDN）、JMdict（辞書生成時のみ・`tools/JMdict_e.gz` は `.gitignore` 済みでリポジトリに無い）。Realtime Database は未使用。
+- **セキュリティ境界**: `firestore.rules` が作成/更新時の構造検証（`playerOrder` 縮小禁止、`status` 3値、`roomId`/`createdAt`/`dictCheck` 不変、削除禁止）。XSS対策はユーザー由来文字列への `escapeHtml()`(game.js:341) 適用。
+- **検証手段**: vitest（`test/utils.test.js` / `test/dictionary.test.js`、現在 2 files / 64 tests / all passed）。ピュア関数のみ対象。Lint・CI(GitHub Actions で vitest)・typecheck のうち typecheck/Lint は無い。手動スモークテストは `python -m http.server`。
 
 ---
 
 ## Behaviors To Preserve（絶対に壊してはいけない既存挙動）
 
-1. **二段階スコア計算**: ポン/カンの仮加算 `ponKanScore` と、あがり時 `calcAgariScore()` での差し引き・正規再計算。あがれなかったプレイヤーは `ponKanScore` のみラウンド得点として確定（game.js:913-941 のコメント参照）
-2. **辞書チェックの全6箇所**: `dictCheck` ON のとき、単語確定の全コードパス（`kanTiles` / `lockPonWord` / `riichiConfirmGroup` / `confirmAgariGroup` / `confirmRiichiAgariOrder` + `executeRon`・`executeTsumo` / `submitAgari`）で `checkDictWord()` が呼ばれること。リファクタ後も呼び出し漏れを作らない
-3. **立直あがり（`executeRon`/`executeTsumo`）は `validateAgari` を通らない**: これは既知・意図的（CLAUDE.md / README「既知の課題」）。共通化の際にうっかり検証を追加しないこと。※なお「待ち牌の無検証」は人間の承認（2026-06-12, Q4）により**辞書検証を追加する仕様に変更が確定**した（D15 / Phase 7 参照）。それ以外の検証は追加しない
-4. **ポン・ロンの権利は下家（`getNextPlayer` の1人）のみ**
-5. **Firestore ドキュメントのスキーマ**: フィールド名・型・更新方法（ドット記法。ネストオブジェクトの丸ごと上書き禁止）。`firestore.rules` の検証と整合していること。**進行中の既存ルームが読める形を維持**（フィールドのリネーム・削除禁止）
-6. **グローバル共有のスクリプト読み込み順**: `utils.js` の関数は `game.js`/`lobby.js` からグローバル参照される。ESモジュール化しない。`utils.js` 末尾の `module.exports` ガード（`typeof module !== 'undefined'`）の形式を維持
-7. **`renderGame()` の全再構築方式**と、ラウンド/ステータス変化検知によるローカル状態リセット（game.js:178-191）
-8. **山切れ終局**: `discardTile` / `passPon` / `submitRiichi` の3箇所で山が空のとき `buildDrawResult()` による終局処理が走ること
-9. **`checkDictWord` の辞書未ロードフォールバック**（game.js:333: `typeof isValidWord !== 'function'` ならスキップ）— ロビーでは辞書を読み込まないため必要
-10. **XSS対策**: `innerHTML` への動的埋め込みは `escapeHtml()` 必須（または `textContent` / `makeTile()`）
-11. **テスト44件が全て成功し続けること**
+1. **二段階スコア計算**: ポン/カンの仮加算 `ponKanScore` と、あがり時 `calcAgariScore()` での差し引き・正規再計算（第1期で utils.js に移設済み）。新機能はここに一切触れない
+2. **辞書チェックの全コードパス**: `dictCheck` ON のとき、単語確定の全箇所で `checkDictWord()`(game.js:332) が呼ばれること、待ち牌は `checkWaitingTileWord`/`submitRiichi` 内で `canFormDictWord` 検証されること。**F2/F3 は `isValidWord` の中身（語彙）を増やすだけで、呼び出し箇所や判定ロジックは変えない**
+3. **`checkDictWord` の辞書未ロードフォールバック**（game.js:334: `typeof isValidWord !== 'function'` ならスキップ）。ロビーは辞書未ロードのため必要。**F3 でもこのフォールバック前提を壊さない**（検索UIはゲーム画面=辞書ロード済みでのみ動く）
+4. **Firestore ドキュメントのスキーマ**: フィールド名・型・更新方法（ドット記法。丸ごと上書き禁止）。`firestore.rules` の検証と整合。**進行中の既存ルームが読める形を維持**。**F1 はスキーマを一切変更しない**（既存の参加フローを使う）
+5. **既存の参加フロー**（lobby.js:88-126）: status/満員/既参加のチェックと `arrayUnion` 参加。F1 は「IDを事前入力する」だけで、この検証を弱めない
+6. **`?room=` の既存読み取り**（game.js:75-77）と、無い場合のロビーリダイレクト。F1 はこれを壊さない
+7. **辞書ファイルの形式**: `dictionary.js` が `DICTIONARY_WORDS`(配列) / `WORD_SET` / `isValidWord` / 末尾 `module.exports` を公開する形と、収録は**ひらがな・牌セットで物理的に作れる2〜7文字のみ**という不変条件。F2 で語彙は増えても、この形式と「牌で作れる」制約は維持
+8. **グローバル共有のスクリプト読み込み順**と `utils.js` 末尾の `module.exports` ガード（`typeof module !== 'undefined'`）。F3 で utils.js に純関数を足す際もこの形式を維持
+9. **XSS対策**: `innerHTML` への動的埋め込みは `escapeHtml()` 必須（または `textContent`/`makeTile()`）。**F3 の検索結果表示はユーザー入力を画面に出すので必ず適用**
+10. **テストが全件成功し続けること**（現在 64 件）。F2 で語彙が変わると `test/dictionary.test.js` の固定語に依存したテストが影響を受けうる → Stop And Ask #3 を参照
 
 ---
 
 ## Non-Negotiables（実装上の制約）
 
 - 最初に `git status` を確認する。**既存の未コミット変更があれば作業を止めて報告**し、自分の変更と混ぜない
-- 編集前に `npm test` を実行し、ベースライン結果（成功数・失敗数）を記録する
-- 変更は小さく戻しやすい単位にする（フェーズごとに独立して revert できること）
-- 無関係な整形・ついでのリファクタリングをしない（`var`→`const` の一括変換等を含む）
-- 既存挙動を勝手に変えない。「これはバグでは」と思っても、修正は Stop And Ask Conditions に従う
-- `public/js/dictionary.js` は自動生成ファイル。**絶対に編集しない**
-- `firestore.rules` / `database.rules.json` / `firebase.json` / `lobby.js` のルーム初期スキーマは今回のスコープでは変更しない
+- 編集前に `npm test` を実行し、ベースライン結果（ファイル数・テスト数・成否）を記録する
+- 変更は小さく戻しやすい単位にする（フェーズごとに独立して revert できること）。**1フェーズ＝1コミット相当**
+- 無関係な整形・ついでのリファクタリングをしない（`var`→`const` 一括変換等を含む）。本指示書が明示した負債（D-T1 等）以外には手を付けない
+- 既存挙動を勝手に変えない。「これはバグでは」と思っても Stop And Ask Conditions に従う
+- `public/js/dictionary.js` は**手で編集しない**。F2 は必ず `tools/build-dictionary.mjs` 経由で再生成する
+- `firestore.rules` / `database.rules.json` / `firebase.json` は変更しない。F1 は既存ルールの範囲内で完結させる
 - `firebase deploy` を実行しない（検証はローカルのみ）
-- 各フェーズごとに `npm test` で検証する
+- 各フェーズごとに `npm test` ＋（UIに触れたフェーズは）手動スモークで検証する
 - 正しさが不明な場合は実装を止めて質問する
 
 ---
@@ -74,13 +90,13 @@
 
 以下に該当したら実装せず、状況を整理して人間に質問すること:
 
-1. Firestore ドキュメントのフィールド追加・リネーム・型変更が必要になった場合
-2. `firestore.rules` の変更が必要になった場合
-3. リファクタ中に**テストと実装が矛盾**しているのを見つけた場合
-4. 「Behaviors To Preserve」に挙げた挙動を変えないと進められないと判断した場合
+1. Firestore ドキュメントのフィールド追加・リネーム・型変更、または `firestore.rules` の変更が必要になった場合（F1 で必要になったら設計を見直す合図）
+2. F2 の再生成で **`tools/JMdict_e.gz` を入手できない**（ネットワーク不可・配布元が落ちている等）場合 → スクリプト変更だけ用意し、再生成は人間に委ねる
+3. F2 の再生成後、辞書語数が**80,000語超 もしくは `dictionary.js` が約2MB超**になった場合 → モバイル初期ロードへの影響が大きいので、コミット前に語数・サイズを報告して人間の承認を得る（人間が「中間の緩和」を選んだ意図はサイズ肥大の回避も含む）
+4. F2 で `test/dictionary.test.js` の既存テストが**落ちた**場合（テストが特定語の収録/非収録を前提にしている）→ テストと新語彙の矛盾として報告し、勝手にテストを書き換えない（Stop And Ask の本旨）
 5. 削除候補のコードが本当に不要か証拠から判断できない場合
-6. ゲームルール上の正解（点数・役・あがり条件）がコードから一意に決まらない場合
-7. 下記 Debt Map で「提案のみ」とマークされた項目に手を付けたくなった場合
+6. ゲームルール上の正解（点数・役・あがり条件）に関わる変更が必要になった場合（本機能では発生しない想定。発生したらスコープ外）
+7. Debt Map で「提案のみ」とマークした項目に手を付けたくなった場合
 
 ---
 
@@ -88,287 +104,184 @@
 
 ```bash
 # ユニットテスト（utils.js / dictionary.js のピュア関数のみ対象）
-npm test            # vitest run（2026-06-12 時点: 2 files, 44 tests, all passed）
+npm test            # vitest run（2026-06-12 時点: 2 files, 64 tests, all passed）
 npm run test:watch
 
 # ローカル起動（手動スモークテスト用。ビルド不要）
 cd public
 python -m http.server 8080
-# → http://localhost:8080/index.html を2つのタブで開く
-#   （プレイヤーIDは sessionStorage 生成なので、同一ブラウザの別タブで2人になれる）
+# → http://localhost:8080/index.html を2タブで開く（sessionStorage 生成IDなので別タブで別人になれる）
+
+# 辞書の再生成（F2 でのみ実行。JMdict_e.gz は .gitignore 済みなので取得が必要）
+curl -o tools/JMdict_e.gz http://ftp.edrdg.org/pub/Nihongo/JMdict_e.gz
+node tools/build-dictionary.mjs   # public/js/dictionary.js を上書き再生成
 ```
 
-Lint・typecheck・CI は存在しない。検証手段は vitest と手動スモークテストのみ。
+Lint・typecheck は存在しない。検証手段は vitest と手動スモークテストのみ。
 
 ---
 
-## Debt Map
+## Debt Map（本機能のスコープに限定）
 
-### D1. `playAgain()` が `makePlayerReset()` を複製している【今実装してよい】
+> 形式: 各項目に「根拠 / なぜ負債か / 影響範囲 / 変更リスク / 改善案 / 検証 / 実装可否」を記す。
+> ここに挙げた以外の負債（第1期で残した提案項目を含む）には手を付けないこと。
 
-- **根拠**: game.js:2065-2075 のプレイヤーリセット9フィールドが、game.js:944-956 の `makePlayerReset(pid, hand)` と完全に同一（hand が `[]` 固定なだけ）
-- **なぜ負債か**: リセットフィールドを追加する際に2箇所の修正が必要で、片方だけ直すと再戦時に古い状態が残留するバグになる
-- **影響範囲**: 再戦処理のみ
-- **変更リスク**: 低。`makePlayerReset(pid, [])` の戻り値と現コードのキー・値が一致することを目視確認すれば等価
-- **改善案**: `playAgain()` 内のループを `upd = Object.assign(upd, makePlayerReset(pid, []))` に置き換える
-- **検証**: `npm test` + 手動: 1ラウンドゲームを終了→「同じメンバーで再戦」→ waiting に戻り再スタートできること
+### D-F1. 共有URLでの参加導線がない【承認済み・実装してよい（機能追加）】
 
-### D2. あいうえおセットの重複定義と `renderDoraWindBar` 内の二重チェック【今実装してよい】
+- **根拠**: ルームIDは `game.js:1861 copyRoomId()` で**ID文字列のみ**コピーされ、`game.html` の待機画面(game.html:22-24)も「このIDを相手に送ってください」と表示するのみ。`index.html`/`lobby.js` は URL クエリを一切読まない（`lobby.js` 冒頭の DOMContentLoaded に `URLSearchParams` の参照なし）。一方 `game.js:75-77` は既に `?room=` を読む実装がある
+- **なぜ負債/不足か**: 参加の障壁が高い（IDを手入力させる）。`?room=` を読む仕組みが game 側にしか無く、入口（ロビー）に無いのは抽象の不足
+- **影響範囲**: ロビーの参加導線、待機画面のコピーボタン。**ゲーム進行・スキーマ・ルールには影響しない**
+- **変更リスク**: 低。Firestore/ルール変更なし。既存の参加フロー(lobby.js:88-126)はそのまま使う
+- **改善案**（承認済み = ロビー事前入力方式）:
+  1. `lobby.js` の DOMContentLoaded 冒頭で `new URLSearchParams(location.search).get('room')` を読み、値があれば `roomIdInput.value` に設定する（数字6桁のみ許容するサニタイズを軽く入れる。`maxlength=6 inputmode=numeric` は既存）。任意で参加カードへスクロール/フォーカス
+  2. 待機画面の共有手段を「URLコピー」に拡張する。`game.html:24` のコピーボタンの隣に **「参加リンクをコピー」** ボタンを追加し、`game.js` に `copyJoinLink()` を実装: `const url = new URL('index.html', location.href); url.searchParams.set('room', roomId); navigator.clipboard.writeText(url.href)`。既存の `copyRoomId()`（IDのみ）は残す（どちらも選べると親切）
+  3. `navigator.clipboard` 不可環境（古い/非HTTPS）に備え、`copyRoomId` 同様の成功トーストに加え、失敗時フォールバック（テキスト選択 or プロンプト表示）を軽く入れる。既存 `copyRoomId` がフォールバック無しなら、最低限 `.catch()` でトースト「コピーできませんでした」を出す
+- **検証**: 手動: (a) 待機画面で「参加リンクをコピー」→ そのURLを別タブで開く → ロビーの参加欄にIDが入っている → 名前を入れて参加できる。(b) `?room=` 無しでロビーを開いても従来どおり空欄であること。(c) 既存の「IDをコピー」も従来どおり動く
+- **実装可否**: **承認済み（Q2）**。Phase 3 で実装
 
-- **根拠**: `AIUEO_SET`（game.js:1877）、`AROW`（game.js:379）、`AEIOU_SET`（game.js:383）が同一内容 `['あ','い','う','え','お']`。さらに renderDoraWindBar 内で `if (AEIOU_SET.has(char)) return;` と `if (AROW.has(char)) return;`（game.js:387-388）が**同じ条件を2回チェック**しており、後者は到達不能の死コード。utils.js にも `A_ROW_SET`（utils.js:346）と `AIUEO_DORA`（utils.js:520）がある
-- **なぜ負債か**: 同一概念が5つの名前で存在し、読み手が「違いがあるのか」を毎回疑う。到達不能チェックは紛らわしい
-- **影響範囲**: ドラ表示まわりの描画のみ
-- **変更リスク**: 低。注意点: `AIUEO_SET` は game.js:1877 で定義されるが `const` のホイスティングなし（TDZ）…ではなく、実行時には DOMContentLoaded 後の関数呼び出しなので参照可能。game.js 内は `AIUEO_SET` に統一し、`AROW`/`AEIOU_SET` のローカル定義を削除する。**utils.js 側の `A_ROW_SET`/`AIUEO_DORA` は役判定・ドラ計算で意味が異なる（断濁母判定用 vs ドラ計上用）ため統合しない**
-- **改善案**: game.js 内のみ `AIUEO_SET` 1つに統一、死んだ二重チェックを1つに
-- **検証**: `npm test` + 手動: ゲーム開始してドラ表示バーに「あいうえお」が出ない・場風ドラ2種が出ること
+### D-F2. 辞書が常用語（優先度タグ付き）に絞られ語数が少ない【承認済み・実装してよい（生成条件の緩和）】
 
-### D3. あがり点プレビューが `calcAgariScore()` の計算式を複製【今実装してよい】
+- **根拠**: `tools/build-dictionary.mjs:85` の `if (!/<(ke|re)_pri>/.test(body)) continue;` により、JMdict の**優先度タグ付きエントリのみ**を採用 → 26,632語（2字1299/3字6192/4字10439/5字5382/6字2276/7字1044）。和製英語・カタカナ語の多くは JMdict 内に読み（`<reb>`）として存在し `kataToHira`(53) で正規化されるが、優先度タグが無いものは捨てられている
+- **なぜ負債か**: dictCheck ON で「辞書にあるはずの普通の語」が弾かれ、ゲーム体験を損なう。人間の判断（Q1）で「段階的に緩和」が確定
+- **影響範囲**: `dictionary.js`（自動生成）の語彙。dictCheck ON のルームの単語確定可否、F3 の検索結果。**dictCheck OFF のルームは語彙に依存しない**
+- **変更リスク**: 中。緩めすぎると(a)稀語/古語/専門語で「何でも通る」状態になり dictCheck の意味が薄れる、(b)ファイルが肥大しモバイルの初期ロード/パースが重くなる、(c) `test/dictionary.test.js` が特定語の収録/非収録を前提にしていると落ちる
+- **改善案**（承認済み = 中間の緩和）:
+  1. **採用条件を「優先度タグ必須」から「品質タグによる除外方式」へ変更**する。具体的には:
+     - 優先度タグ(`ke_pri`/`re_pri`)の有無は問わない（フィルタを外す）
+     - ただしエントリの `<misc>` 品質タグを見て、**除外集合に該当するエントリはスキップ**する。除外する JMdict misc エンティティの目安: `&arch;`（古語）, `&obs;`（廃用）, `&obsc;`（隠語/難解）, `&rare;`（稀語）, `&derog;`（侮蔑）, `&vulg;`（卑語）, `&X;`（露骨）, `&sl;`（俗語）のうち**人間が許容しない範囲**。最低限 `arch/obs/obsc/rare/vulg/X/derog` は除外を推奨。`sl`(俗語)・`col`(口語) は「日本語として認められる範囲」に含めてよい（Q1 の方針＝和製英語等は可）。**具体的な採用/除外タグの最終確定は、まず除外集合で試作 → 語数とサンプルを人間に提示**してよい（Stop And Ask #3）
+     - 既存の `isFormable`(59) による牌制約・長さ制約（2〜7文字）・`kataToHira` 正規化は**そのまま維持**（牌で作れない語は引き続き除外）
+     - JMdict_e には固有名詞（人名・地名）は基本含まれない（それらは JMnedict 側）。よって proper-noun 対策は実質不要だが、`<misc>` に該当タグがあれば除外でよい
+  2. スクリプトのコメント（抽出条件 build-dictionary.mjs:11-16）を新方針に更新する
+  3. 再生成し、**語数・ファイルサイズ・各文字数の内訳・無作為サンプル20語**をログ出力して報告する
+  4. **Stop And Ask #3 の閾値（80,000語超 or 約2MB超）に達したら、コミット前に人間へ報告**して除外タグを締めるか判断を仰ぐ
+  5. 生成後、`isValidWord` の形式・牌制約・ひらがな限定が保たれていることを Phase 1 で追加したテストで確認
+- **検証**: `npm test`（Phase 1 の不変条件テスト＋ `test/dictionary.test.js`）。落ちたら Stop And Ask #4。手動: F3 検索（Phase 4 完了後）で、以前弾かれた普通の和製英語/カタカナ語がヒットすること、明らかな非語がヒットしないこと
+- **実装可否**: **承認済み（Q1）**。Phase 5 で実装。**JMdict_e.gz を入手できなければ Stop And Ask #2**
 
-- **根拠**: game.js:1679-1684（`renderAgariModal` 内）に「プレビューも calcAgariScore と完全同一の計算」というコメント付きで、calcAgariScore(game.js:870-880) と同じ式が手書き複製されている
-- **なぜ負債か**: 点数ルールを変えるとプレビューと確定点がズレる。実際にコメントで「同一であること」を人力保証している状態
-- **影響範囲**: あがりモーダルの表示のみ（確定点は `submitAgari` 側の calcAgariScore が権威）
-- **変更リスク**: 低〜中。プレビューは `baseScore`/`roleBonus`/`doraBonus` の**内訳**も表示に使うため、合計だけ calcAgariScore に置き換えると内訳が出せない。改善案参照
-- **改善案**: calcAgariScore を「内訳オブジェクトを返す関数」に分解する（例: `calcAgariBreakdown(myData, finalSets, roles, doraTiles)` が `{ baseScore, roleBonus, doraBonus, total }` を返し、calcAgariScore はその `total` を返す薄いラッパーにする）。`renderAgariModal` と `calcAgariScore` の両方がこれを使う。**既存の calcAgariScore の呼び出し3箇所（executeRon / executeTsumo / submitAgari）の結果が変わらないこと**
-- **検証**: `npm test`（D6 でテスト追加後はそのテストも）+ 手動: あがりモーダルのプレビュー点数と、確定後のラウンドサマリの点数が一致すること
+### D-F3. ゲーム画面に辞書内検索がない【承認済み・実装してよい（機能追加）】
 
-### D4. `executeRon` と `executeTsumo` が約90%重複【今実装してよい】
+- **根拠**: `game.html` は `dictionary.js` をロードし `isValidWord` が使えるが、ユーザーが任意の語を辞書照合するUIが無い。クライアント側にカタカナ→ひらがなの正規化純関数も無い（`kataToHira` は `tools/build-dictionary.mjs:53` にあるが Node 専用でブラウザからは見えない）
+- **なぜ不足か**: dictCheck ON で何が通るか事前に確認できず、ユーザーが試行錯誤を強いられる
+- **影響範囲**: `game.html`（ルールモーダル）、`game.js`（検索ハンドラ）、`utils.js`（正規化純関数）。**ゲーム状態・Firestore・スキーマには触れない**
+- **変更リスク**: 低。表示専用。唯一の注意点はユーザー入力のXSS（Behaviors #9）
+- **改善案**（承認済み = ルールモーダルにタブ追加）:
+  1. `utils.js` に純関数を追加し `module.exports` に載せ、テストする:
+     - `toHiraganaWord(str)`: 片仮名→平仮名変換＋前後空白除去＋`ー`はそのまま（`tools/build-dictionary.mjs:53` の `kataToHira` と同等のロジックをブラウザ＆Node共用で持つ）。**辞書が常にひらがなで持つため、検索入力も同じ正規化を通す**
+     - 任意: `isFormableLength(word)`（2〜7文字判定）は新規不要なら作らない。検索は長さ外でも「未登録」と表示すればよい
+  2. `game.html` のルールモーダル `rules-tabs`(266-271) に `<button class="rules-tab" data-tab="search">辞書検索</button>` を追加し、対応する `<div id="tab-search" class="rules-content hidden">` に検索入力＋結果表示領域を作る。既存タブ切替JS（`openRulesModal`/`closeRulesModal` 周辺、`data-tab` で `tab-<name>` を表示する仕組み）に乗せる
+  3. `game.js` に検索ハンドラを実装: 入力を `toHiraganaWord` で正規化 → `typeof isValidWord === 'function'` を確認 → `isValidWord(normalized)` の真偽で「✅ 辞書にあります／❌ 見つかりません」を表示。**表示は `textContent`/`escapeHtml`(341) を使い、生の入力を `innerHTML` に入れない**
+  4. 検索は dictCheck の ON/OFF に依存しない（辞書は常にロード済み）。入力 Enter でも検索できるよう keydown を拾う
+  5. （任意・提案にとどめてよい）前方一致の候補表示や「近い語」は**やらない**。要件は「登録されているかの検索」= 完全一致判定で十分。やりたくなったら提案として報告（Out-of-scope）
+- **検証**: `npm test`（`toHiraganaWord` のテスト）。手動: ルール→辞書検索タブで、(a)「さかな」→ あり、(b)「サカナ」→ ひらがな正規化されて あり、(c) でたらめな「ぱぴぷぺぽぱ」→ なし、(d) 入力を `<script>` 等にしてもエスケープされ実行されないこと（XSS確認）
+- **実装可否**: **承認済み（Q3）**。Phase 4 で実装
 
-- **根拠**: game.js:1499-1533 と game.js:1535-1569。差分は (a) ターン/フェーズ検証の有無（ロンは他人のターンなので検証なし、ツモはあり）、(b) discardPile から1枚 pop するか、(c) ponWindow リセットの有無、(d) wordLog の文言、(e) 成功メッセージ
-- **なぜ負債か**: あがり処理の修正（役コンテキスト追加等）を2箇所に同時適用する必要があり、過去にズレた形跡はないが構造的にズレやすい
-- **影響範囲**: 立直あがり（ロン/ツモ）
-- **変更リスク**: 中。トランザクション内のロジックなので、共通化の際に検証順序・更新フィールドを1つでも落とすと対戦が壊れる
-- **改善案**: トランザクション内の共通部（finalSets 構築 → ctx 構築 → detectRoles → calcAgariScore → buildRoundResult → players.* 更新）をヘルパー関数に抽出し、差分（a〜e）は呼び出し側に残す。**`validateAgari` を通さない現仕様を維持**（Behaviors To Preserve #3）
-- **検証**: `npm test` + 手動: 2タブで立直→ツモあがり、立直→相手の捨て牌でロン、の両方が完走すること
+### D-T1. ロビーのルール切替JSに死んだセレクタ（タイプミス）【今実装してよい（F1 で触れる範囲のみ・任意）】
 
-### D5. 山切れ終局・捨て牌処理の分岐が3箇所に重複【今実装してよい】
+- **根拠**: `index.html:214` の `document.querySelectorAll('#lobbyRuysModal .rules-content, #lobbyRulesModal .rules-content')` に **`#lobbyRuysModal`（`Rules` の誤り）** が含まれる。同じ行に正しい `#lobbyRulesModal .rules-content` も並記されているため動作は正常だが、前者は常に0件マッチの死コード
+- **なぜ負債か**: 読み手が「2つのモーダルがあるのか」と誤認する
+- **影響範囲**: ロビーのルールモーダルのタブ切替（表示のみ）
+- **変更リスク**: 最低。誤セレクタを削るだけ
+- **改善案**: `#lobbyRuysModal .rules-content, ` を削除し `#lobbyRulesModal .rules-content` のみにする
+- **検証**: 手動: ロビーの「ルール・役一覧・点数表を見る」→ 各タブが従来どおり切り替わること
+- **実装可否**: **F1 で `index.html`/ロビー周辺に触れるついでに直してよい（任意）**。F1 と無関係に単独で直すのは「無関係な整形」に当たるので、F1 のフェーズ内に限る。やらない判断も可
 
-- **根拠**: `discardTile`（game.js:1065-1083）と `submitRiichi`（game.js:1428-1444)が「山切れなら buildDrawResult で終局 / そうでなければ pon_window へ」のほぼ同一分岐を持つ。`passPon`（game.js:1163-1170）にも山切れ分岐がある
-- **なぜ負債か**: 終局条件やponWindow スキーマを変える際に3箇所の同期が必要
-- **影響範囲**: 捨て牌・立直宣言・ポンパスの3経路
-- **変更リスク**: 中。Firestore 更新オブジェクトの組み立てなので、フィールドの抜けが即バグ
-- **改善案**: 「捨て牌後の遷移フィールドを組み立てる」ピュアヘルパー（例: `buildDiscardTransition(room, myPlayerId, discardedTile, pile)` が upd オブジェクトを返す）を抽出し、discardTile / submitRiichi から使う。passPon は構造が異なる（捨て牌なし）ため無理に統合しない
-- **検証**: `npm test` + 手動: 通常の捨て→ポンウィンドウ表示、立直宣言→捨て、（可能なら）山を減らした状態での山切れ終局
+### D-P1. ロビーの満員チェックが非トランザクション【提案のみ・今回スコープ外】
 
-### D6. ラウンド集計・あがり点計算がテスト不能（game.js 内にあるため）【今実装してよい】
+- **根拠**: `lobby.js:97-118`。`get()` で読んで `playerOrder.length >= maxPlayers` を確認後 `update()` で `arrayUnion`。同時参加でレースすると maxPlayers を超えうる（`firestore.rules` は4人で頭打ちにするだけ）
+- **F1 との関係**: 共有URLで参加が増えると同時参加レースの確率は上がりうるが、身内向け前提で発生頻度は低い
+- **実装可否**: **提案のみ**。`runTransaction` 化は参加フローの挙動変更であり本機能のスコープ外。最終報告に根拠と推奨だけ載せる
 
-- **根拠**: `calcAgariScore`（game.js:870）、`buildDrawResult`（game.js:886）、`buildRoundResult`（game.js:913）は引数のみに依存するピュア関数だが、game.js は DOM 前提（トップレベルで `getOrCreatePlayerId()` 実行・イベント登録）のため Node から import できず、テストが書けない
-- **なぜ負債か**: 二段階スコア計算という**このゲームで最も壊しやすい仕様**（CLAUDE.md 明記）に安全網がない。D3/D4/D5 のリファクタはこの3関数の周辺を触るため、先にテストが要る
-- **影響範囲**: 全あがり経路・山切れ終局
-- **変更リスク**: 低〜中。移動自体は読み込み順（utils.js → game.js）的に安全。utils.js の責務「牌、役、点数まわり」（README）にも合致
-- **改善案**: 3関数を utils.js へ移動し、`module.exports` に追加。game.js からは（グローバル共有なので）そのまま呼べる。移動は**コピペ＋元の削除のみ**で、ロジックを1文字も変えない。その後 `test/utils.test.js` にテストを追加:
-  - calcAgariScore: ponKanScore 差し引きの検証（仮加算済み score から正規点に再計算されること）、ponKanScore=0 のケース
-  - buildRoundResult: 勝者は winnerScore、敗者は ponKanScore のみ確定すること、totalScores の累積、roundHistory の追記
-  - buildDrawResult: 全員 ponKanScore のみ確定、winnerName に「（山切れ）」が付くこと
-- **検証**: `npm test`（既存44件 + 追加分）。手動: 通常あがり1回で点数表示が従来どおりであること
+### D-P2. ルームIDが6桁数字で総当たり可能【提案のみ・今回スコープ外】
 
-### D7. `detectRoles` の JSDoc が迷子になっている【今実装してよい】
-
-- **根拠**: utils.js:325-345 と utils.js:395-406 に `detectRoles` 用の JSDoc/コメントブロックがあるが、間に「濁音セット定義」「風・ドラシステム」セクション（utils.js:330-598）が挿入され、実際の `function detectRoles` は utils.js:601 にある。`@param` 説明が2つに分裂
-- **なぜ負債か**: ドキュメントが関数と紐付かず、ctx パラメータの仕様（riichiAt, baWind 等）を探すのに苦労する
-- **影響範囲**: コメントのみ（コード変更なし）
-- **変更リスク**: 最低
-- **改善案**: 分裂した JSDoc を統合して `function detectRoles` 直前（utils.js:601 の前）に移動する。コメント内容は変更しない（統合のみ）
-- **検証**: `npm test`
-
-### D8. `passPon` にフェーズガードがなく、立直者の自動パスタイマーが多重発火しうる【承認済み・実装してよい】
-
-- **根拠**: `passPon`（game.js:1153-1173）はトランザクション内で `turnPhase === 'pon_window'` を**検証せずに** `turnPhase: 'draw'` を書き込む。一方 `renderPonOverlay`（game.js:644）は立直者が待ち牌以外を見たとき `setTimeout(() => passPon(), 300)` を仕掛けるが、`renderGame` はスナップショットごとに走るため pon_window 中の再描画のたびにタイマーが積まれる。遅延発火した古いタイマーが、すでに `draw`→`discard` へ進んだゲームを `draw` に巻き戻す競合の余地がある
-- **なぜ負債か**: 他の全アクション（drawTile/discardTile/ponTile/lockPonWord 等）はフェーズ検証があるのに passPon だけない。状態機械の防御の穴
-- **影響範囲**: ポンウィンドウ→次ターンの遷移。発生するとターン進行の desync
-- **変更リスク**: 中。「ガード追加」は実質バグ修正＝挙動変更であり、正常系で passPon が pon_window 以外から呼ばれる正当なケースがないことの確認が要る（コード上は見当たらないが、人間の確認を取ること）
-- **改善案**: (a) passPon のトランザクション内に `if (room.turnPhase !== 'pon_window') return;`（throw ではなく静かに無視）を追加、(b) renderPonOverlay の自動パスに「すでにタイマー予約済みなら積まない」ガードを追加
-- **検証**: 手動: 立直者の下家が待ち牌以外を捨てたとき自動パスされてゲームが続行すること。立直ロン・通常ポンが従来どおり動くこと
-- **実装可否**: **承認済み（2026-06-12、Q1 にて人間が承認）**。Phase 6 で実装する。なお修正は (a)(b) のガード追加のみに留め、ポン/ロン/パスの正常系フローのロジックは変えないこと
-
-### D9. ローカル `selectedIndices` をトランザクション内の最新 hand に適用している【提案のみ】
-
-- **根拠**: `discardTile`（game.js:1055）、`kanTiles`（game.js:1100）、`lockPonWord`（game.js:1211）は、描画時点の手牌に対するインデックス `selectedIndices` を、トランザクションで読み直した `room.players[myPlayerId].hand` に適用する。トランザクションのリトライや競合更新で手牌が変わっていた場合、別の牌を捨てる/使う理論的リスク
-- **なぜ負債か**: 自分のターン中に自分の手牌を書き換える他者はいない設計のため実害はほぼないが、インデックスではなく牌そのものを渡す方が堅牢
-- **影響範囲**: 捨て牌・カン・ポン確定
-- **変更リスク**: 中。選択UIとの整合（同字が複数あるときの同定）に注意が要る
-- **実装可否**: **提案のみ**。現設計で実害が出る再現手順が示せないため、修正は人間の判断を仰ぐ
-
-### D10. ロビーの満員チェックが非トランザクション【提案のみ】
-
-- **根拠**: lobby.js:97-118。`get()` で読んで `playerOrder.length >= maxPlayers` をチェック後、`update()` で arrayUnion。同時参加でレースすると maxPlayers を超えうる（firestore.rules は4人で頭打ちにするだけで、maxPlayers=2 のルームに3人入りうる）
-- **影響範囲**: ルーム参加
-- **実装可否**: **提案のみ**。runTransaction 化は容易だが、参加フローの挙動変更でありスモークテストの工数に対し発生頻度が低い（身内向け前提）。人間の判断を仰ぐ
-
-### D11. Firebase compat SDK（9.22.0・旧API）【提案のみ・今回スコープ外】
-
-- **根拠**: README「既知の課題」に明記。CDN + グローバル共有の現アーキテクチャと一体
-- **実装可否**: **提案のみ**。modular SDK への移行は全ファイルに波及する設計変更。承認なしに着手しない
-
-### D12. `var`/`let`/`const` の混在、`renderGame` の全再構築方式【触らない】
-
-- **根拠**: CLAUDE.md が「既存セクションのスタイルに合わせる」と明記。全再構築は設計判断（README）
-- **実装可否**: **触らない**。一括変換・差分レンダリング化はしない
-
-### D13. スコアルールの位置づけと魔法数の散在【今実装してよい（コメント更新＋定数集約のみ）】
-
-- **根拠**: utils.js:112-118 に「TODO: スコアルール確定後に修正する」とあるが、人間の回答（2026-06-12, Q2）により実態は「**文字数×100 が現行仕様。ただし将来、より良いバランスのルールがあれば変更の可能性あり。ルールの理解しやすさも重視**」と確定した。一方、点数の魔法数が複数ファイルに散在している:
-  - 単語点 ×100: utils.js:117（`calcWordScore`）
-  - ポン/カン仮加算 `(文字数-1)×100`: game.js:1109（kanTiles）と game.js:1216（lockPonWord）に同じ式が2回
-  - ドラ仮加算 200/枚: game.js:1119（kanTiles）と game.js:1222（lockPonWord）
-  - ドラあがり時 500/枚: game.js:875（calcAgariScore）、game.js:935（buildRoundResult）、game.js:1682（renderAgariModal）
-- **なぜ負債か**: 将来バランス調整する方針が明言されている以上、点数定数が6箇所以上に散らばっている現状は「ルール変更が多点修正になる」という直接的なリスク。仮加算と正規点の対応関係（200↔500、(n-1)×100↔n×100）もコードを読まないと分からない
-- **影響範囲**: 全スコア計算経路
-- **変更リスク**: 低〜中。**数値・式は1つも変えない**。リテラルを名前付き定数に置き換えるだけ
-- **改善案**:
-  1. utils.js の牌定義セクション付近に定数を集約する（例）:
-     ```js
-     // ---- 点数ルール（バランス調整時はここだけ変更する） ----
-     const SCORE_PER_TILE       = 100;  // 単語点: 文字数×100
-     const PON_KAN_TEMP_PER_TILE = 100; // ポン/カン仮加算: (文字数-1)×100
-     const DORA_BONUS_AGARI     = 500;  // あがり時ドラ1枚あたり
-     const DORA_BONUS_TEMP      = 200;  // ポン/カン仮加算時ドラ1枚あたり
-     ```
-  2. `calcWordScore` と仮加算式 `(tiles.length - 1) * 100` をこの定数で書き直し、仮加算式は `calcPonKanTempScore(tiles)` として utils.js に関数化（game.js の2箇所から使う）
-  3. game.js / utils.js 内の 500・200 リテラルを定数参照に置換（D3/D4 のヘルパー統一後に行うと置換箇所が減る）
-  4. utils.js:112-114 の TODO コメントを実態に合わせて更新する（例: 「現行ルール: 文字数×100。将来バランス調整の可能性あり。変更時は上の点数定数のみ修正する」）。**TODO の趣旨（ルールは再調整されうる）は消さない**
-  5. 定数と `calcPonKanTempScore` を `module.exports` に追加し、「仮加算＋差し引き再計算の整合」をテストで固定する（例: ポン3文字の仮加算200点が、あがり時に300点として再計算されること）
-- **検証**: `npm test`（既存＋追加分）。数値を変えていないので既存テストは無変更で通るはず。通らなければ置換ミス
-- **注意**: **点数バランス自体の変更（×100以外への変更、役点の調整等）はこのリファクタでは行わない**。それはプロダクト判断であり Out-of-scope。この項目は「将来の変更を一点修正にする」準備まで
-
-### D14. `detectRoles` が「2文字×5組」を七対子として誤検出する【承認済み・実装してよい（仕様修正）】
-
-- **根拠**: utils.js:606-607 の `allTwo = (allSets.length === WIN_SET_COUNT || allSets.length === 7) && all 2文字` により、**5組**すべて2文字の場合も七対子役（500点）が付き、`isChiitoi` フラグが他の役の閾値を引き上げる（母染め・母音流れ・混濁母・混拗長が3組→5組に、断濁母が無効に）。人間の回答（2026-06-12, Q3）: 「**5組の七対子はないはずなので意図していない**」→ 七対子は7組のときのみ、が正しい仕様
-- **なぜ負債か**: 仕様と実装の不一致（確定）。テスト側も誤検出を前提に回避している（test/utils.test.js:164-165 のコメント「5組すべてが2文字だと detectRoles は七対子と判定し…3文字組を混ぜて回避する」）
-- **影響範囲**: `detectRoles` の七対子判定と、isChiitoi に連動する各役の閾値。なお `validateAgari`（utils.js:155-157）の「5組あがり自体の成立」は通常ルールどおりで**変更しない**（あがり可否は仕様どおり。役の誤検出だけが問題）
-- **変更リスク**: 低。修正は1条件の削除。実プレイで「2文字×5組かつロックなし」は手牌枚数の制約上ほぼ到達不能だが、仕様の正しさとテストの素直さのために直す価値がある
-- **改善案**:
-  1. utils.js:606 を `var allTwo = allSets.length === 7 && allSets.every(...)` に変更（`WIN_SET_COUNT ||` の分岐を削除）
-  2. `detectRoles` 内の母染め等の閾値コメント「5組または7組」系の記述があれば実態に合わせて更新
-  3. テスト追加: 「2文字×5組では七対子役が付かない」「2文字×7組では付く（既存テストで担保済み）」
-  4. test/utils.test.js:164-165 の回避コメントを削除または更新（回避が不要になるが、既存テストケース自体は変更不要で通るはず）
-- **検証**: `npm test`。既存テストは七対子誤検出を**回避して**書かれているため、この修正で壊れるテストはない見込み。壊れた場合は Stop And Ask #3（テストと実装の矛盾）として報告
-- **実装可否**: **承認済み（2026-06-12、Q3 にて人間が「意図していない」と回答）**。Phase 6 で実装する
-
-### D15. 立直の待ち牌に辞書検証がない【承認済み・実装してよい（仕様追加）】
-
-- **根拠**: `riichiAddWaiting`（game.js:1365-1375）は1〜2文字の任意文字列を無検証で待ち牌として受け付ける。人間の回答（2026-06-12, Q4）: 「**待ち牌設定時に辞書にその単語があるかを確認**」する仕様に変更が確定
-- **確定仕様**:
-  - `dictCheck` ON のルームのみ検証する（OFF は従来どおり無検証）。辞書未ロード時はスキップ（`checkDictWord` と同じフォールバック方針）
-  - 待ち牌 w が有効 ＝「立直後に残る手牌（riichiHand）＋ w の**並べ替えのいずれか**が辞書語になる」こと（あがり時は `confirmRiichiAgariOrder` で並び順を選んで辞書チェックされるため、判定基準を揃える）
-  - **ステップ2（追加時）**: 捨て牌が未確定のため、「`remainingHand` から1枚捨てた残り＋w」が辞書語になる捨て方が1つでも存在すれば追加を許可。なければエラー表示（例: 「この待ち牌では辞書の単語が完成しません」）で追加拒否＝即時フィードバック
-  - **`submitRiichi`（宣言確定時）**: 実際の捨て牌を除いた riichiHand で全待ち牌を再検証し、不成立があればエラーで中断（権威チェック。例: 「捨て牌の選択と待ち牌が合っていません: 〇」）
-  - **入力は1文字のみに制限**する。根拠: あがり牌との照合は単一牌の文字列一致（`drawTile` の `waitTiles.includes(drawn)` game.js:1032、`claimRon` の `waiting.includes(pon.tile)` game.js:1577）であり、2文字の待ちは現状でも**絶対に成立しない死に入力**のため（牌は全て1文字）
-- **なぜ今まで放置されていたか**: README「既知の課題」に「立直の待ち牌が自己申告制」と明記された意図的未対応だったが、Q4 の回答で方針転換
-- **影響範囲**: 立直フロー（ステップ2・宣言確定）。dictCheck OFF のルームは挙動不変
-- **変更リスク**: 中。立直の UX が変わる（不正な待ちが追加できなくなる）。トランザクション内で重い計算をしないこと（順列は riichiHand 1〜3枚＋w の最大4文字＝高々24通りなので問題なし）
-- **改善案**:
-  1. utils.js に純関数 `canFormDictWord(tiles, isValid)` を追加（tiles の順列のいずれかで `isValid(word)` が true になるか。validator を引数で受けるので utils.js は dictionary.js に依存しない）。`module.exports` に追加し、スタブ validator でユニットテストを書く
-  2. `riichiAddWaiting`: 1文字チェックに変更 → dictCheck ON かつ `isValidWord` 利用可能なら、`remainingHand` の各捨て候補について `canFormDictWord(残り.concat([w]), isValidWord)` を試し、全滅なら追加拒否
-  3. `submitRiichi`: 捨て牌除去後の riichiHand で各待ち牌を `canFormDictWord` 検証、不成立があれば throw（既存のエラーハンドリング様式 `showMsg('❌ ' + err.message)` に乗せる）
-  4. CLAUDE.md の「検証の穴」と README「既知の課題」の待ち牌自己申告に関する記述を、実装後の実態に合わせて更新する
-- **検証**: `npm test`（canFormDictWord のテスト）+ 手動: dictCheck ON で (a) 辞書語が完成しない待ち牌が追加できないこと、(b) 正しい待ち牌で立直→ツモ・ロンが従来どおり完走すること、(c) dictCheck OFF のルームでは任意の1文字が追加できること
-- **実装可否**: **承認済み（2026-06-12、Q4 にて人間が指示）**。Phase 7 で実装する
+- **根拠**: `generateRoomId`(utils.js:107) が6桁数字。README「既知の課題」にも明記。共有URL化で**URLにIDが平文で載る**が、もともとIDは口頭共有される前提で秘匿情報ではない
+- **F1 との関係**: 機密性を新たに下げるものではない（IDは元から共有される）。ただしURLがチャット履歴等に残りやすくなる点は留意
+- **実装可否**: **提案のみ**。桁数/生成方式の変更はスコープ外（Out-of-scope）。最終報告に注意点として記載
 
 ---
 
 ## Implementation Phases
 
-各フェーズの完了条件: `npm test` 全件成功 + そのフェーズの手動検証項目をクリア。**フェーズをまたいで変更を混ぜない。**
+各フェーズの完了条件: `npm test` 全件成功 ＋ そのフェーズの手動検証項目をクリア。**フェーズをまたいで変更を混ぜない。**
+順序の方針: ①状態確認 → ②安全網（テスト先行）→ ③外部依存のない安全な機能から → ④外部DL/再生成を伴う最大変更（F2）は最後。
 
 ### Phase 0: 現状確認とベースライン記録
 1. `git status` を確認。未コミット変更があれば**停止して報告**
-2. `npm test` を実行し、結果（ファイル数・テスト数・成否）を記録する（参考: 2026-06-12 時点で 2 files / 44 tests / all passed）
+2. `npm test` を実行し、結果（ファイル数・テスト数・成否）を記録（参考: 2026-06-12 時点で 2 files / 64 tests / all passed）
 3. `cd public && python -m http.server 8080` で起動し、2タブでルーム作成→参加→ゲーム開始→1枚引いて捨てる、までのスモークが通ることを確認
 
-### Phase 1: 安全網の追加（コード変更なし、テストのみ）
-- `test/utils.test.js` に既存ピュア関数の未カバーエッジを追加:
-  - `validateAgari`: カンを含む4文字ロック組での成立、七対子未満（6組2文字）の不成立理由
-  - `initDoraTiles`: 戻り値のドラが場風の段の牌のみで「あいうえお」を含まないこと、最大2種
-  - `addKanDora`: 呼び出し後にドラ種が増える or 既存ドラの倍率が上がること、winds 不明時は変更なし
-- **既存実装の挙動をそのまま固定する**テストを書く。失敗するテストを書いて実装を「直す」ことはしない（矛盾を見つけたら Stop And Ask #3）
+### Phase 1: 安全網の追加（コード変更は最小、テスト中心）
+- `test/utils.test.js` に **F3 で追加予定の正規化純関数のテストの受け皿**は Phase 2 で書くため、ここでは**辞書の不変条件テスト**を追加する（F2 で壊さないため先に固定）:
+  - `test/dictionary.test.js` に「全語がひらがな＋`ー`のみ」「全語が2〜7文字」「`isFormable` 相当（牌制約）を満たす」ことを**現行 `DICTIONARY_WORDS` に対して**検証するテストを追加。これが F2 後も通れば、緩和しても形式不変を担保できる
+- **既存実装の挙動をそのまま固定する**テストを書く。失敗するテストを書いて実装を「直す」ことはしない（矛盾を見つけたら Stop And Ask #4）
 
-### Phase 2: 明らかに安全な整理（D1, D2, D7）
-1. D1: `playAgain()` を `makePlayerReset()` 再利用に置換
-2. D2: game.js 内のあいうえおセットを `AIUEO_SET` に統一、`renderDoraWindBar` の死んだ二重チェックを除去
-3. D7: utils.js の迷子 JSDoc を `detectRoles` 直前に統合
-- 検証: `npm test` + 手動（再戦フロー・ドラ表示）
+### Phase 2: F3のコア純関数（DOM非依存・テスト先行）
+1. `utils.js` に `toHiraganaWord(str)` を追加（片仮名→平仮名・トリム・`ー`保持）。`module.exports`(940) に追記
+2. `test/utils.test.js` にテスト追加: 片仮名→平仮名（「サカナ」→「さかな」）、前後空白除去、`ー` 保持、空文字、混在入力
+- 検証: `npm test`（UI変更なし）
 
-### Phase 3: 集計ロジックの責務分離とテスト（D6）
-1. `calcAgariScore` / `buildRoundResult` / `buildDrawResult` を game.js から utils.js へ**無変更で移動**し、`module.exports` に追加
-2. D6 記載の観点でユニットテストを追加
-- 検証: `npm test` + 手動: 通常あがり1回（モーダルで5組作成→あがり→ラウンドサマリの点数確認）
+### Phase 3: F1 共有URL参加（D-F1, 任意で D-T1）
+1. `lobby.js`: DOMContentLoaded で `?room=` を読み、6桁数字サニタイズして `roomIdInput.value` に事前入力
+2. `game.html`/`game.js`: 待機画面に「参加リンクをコピー」ボタンを追加し `copyJoinLink()` を実装（`index.html?room=XXXXXX` をコピー）。既存「IDをコピー」(`copyRoomId`)は残す。clipboard 失敗時のトーストを入れる
+3. （任意）D-T1: `index.html:214` の死んだセレクタ `#lobbyRuysModal` を削除
+- 検証: `npm test` ＋ 手動（D-F1 の (a)(b)(c)、D-T1 を直したならロビールールタブ切替）
 
-### Phase 4: 重複計算の統一と点数定数の集約（D3, D13）
-1. `calcAgariScore` を内訳返却ヘルパー + 薄いラッパーに分解（utils.js 内）
-2. `renderAgariModal` のプレビュー計算をヘルパー呼び出しに置換
-3. Phase 3 で書いたテストが**無変更で**通ることを確認（通らなければ分解が等価でない＝やり直し）
-4. D13: 点数定数（`SCORE_PER_TILE` / `DORA_BONUS_AGARI` / `DORA_BONUS_TEMP` 等）を utils.js に集約し、game.js / utils.js のリテラル（100・200・500、`(tiles.length - 1) * 100`）を定数・`calcPonKanTempScore()` 参照に置換。**数値は1つも変えない**
-5. D13: utils.js の TODO コメントを実態（現行×100・将来調整の可能性あり・変更時は定数のみ修正）に合わせて更新
-6. D13: 仮加算↔正規点の整合テストを追加
-- 検証: `npm test` + 手動: プレビュー点と確定点の一致、ポン確定時の仮加算点（3文字なら+200+ドラ）が従来どおりであること
+### Phase 4: F3 検索UI（D-F3）
+1. `game.html` ルールモーダルに「辞書検索」タブ（`data-tab="search"` ＋ `#tab-search`）と入力/結果要素を追加
+2. `game.js` に検索ハンドラを実装（`toHiraganaWord` → `isValidWord` → 結果表示。`escapeHtml`/`textContent` 使用。Enter対応）
+3. タブ切替の既存JSに `search` が乗ることを確認
+- 検証: `npm test` ＋ 手動（D-F3 の (a)〜(d)、特に (d) XSS）
 
-### Phase 5: あがり経路・捨て牌経路の重複排除（D4, D5）
-1. D4: executeRon/executeTsumo の共通部をヘルパー抽出（validateAgari は通さないまま）
-2. D5: discardTile/submitRiichi の終局/pon_window 分岐をピュアヘルパー化
-- 検証: `npm test` + 手動: 立直ツモ・立直ロン・通常捨て→ポン→単語確定、の3フローを2タブで完走
+### Phase 5: F2 辞書拡充（D-F2・外部DL/再生成）
+1. `tools/build-dictionary.mjs` の抽出条件を「優先度タグ必須」→「品質タグ除外方式」に変更（D-F2 改善案1）。コメントも更新
+2. `tools/JMdict_e.gz` を取得（無ければ **Stop And Ask #2**）し `node tools/build-dictionary.mjs` で再生成
+3. 語数・ファイルサイズ・文字数内訳・サンプル20語を記録。**閾値超なら Stop And Ask #3**
+4. `npm test`（Phase 1 の不変条件 ＋ `test/dictionary.test.js`）。落ちたら **Stop And Ask #4**
+5. `README.md`(49,57,81,89,136 付近の「約26,000語」表記)・`index.html`(49 の「約26,000語」)・`CLAUDE.md`(辞書の語数記述) を新語数に更新
+- 検証: `npm test` ＋ 手動: F3 検索で、以前弾かれた一般的な和製英語/カタカナ語がヒット、明らかな非語は非ヒット。dictCheck ON のゲームで普通の語が確定できること
 
-### Phase 6: 承認済みの防御的修正・仕様修正（D8, D14）
-- **D8（承認済み 2026-06-12）**:
-  1. `passPon` のトランザクション内に、`room.turnPhase !== 'pon_window'` なら何も書き込まず終了するガードを追加（throw ではなく静かに無視。エラーメッセージ表示も不要）
-  2. `renderPonOverlay` の立直者自動パス（game.js:644 の `setTimeout(() => passPon(), 300)`）に多重予約ガードを追加（例: モジュールスコープのフラグ/タイマーIDで「予約済みなら積まない」。pon_window が閉じたらフラグをリセット）
-- **D14（承認済み 2026-06-12）**: `detectRoles` の七対子判定を「7組のみ」に修正（utils.js:606 の `WIN_SET_COUNT ||` 分岐を削除）。「2文字×5組では七対子が付かない」テストを追加し、test/utils.test.js:164-165 の回避コメントを更新
-- 検証: `npm test` + 手動2タブで (a) 通常ポン→単語確定、(b) 立直者の下家として待ち牌以外が流れてきたとき自動パスでゲーム続行、(c) 立直ロン、の3フローが従来どおり動くこと
-- D8/D14 以外の挙動変更はこのフェーズでは行わない（D9/D10 は引き続き提案のみ）
-
-### Phase 7: 待ち牌の辞書検証を追加（D15・承認済み仕様追加）
-1. utils.js に `canFormDictWord(tiles, isValid)` を追加し、スタブ validator でユニットテストを書く
-2. `riichiAddWaiting` を1文字制限＋辞書検証（捨て候補ごとの成立判定）に変更
-3. `submitRiichi` に権威チェック（確定 riichiHand での全待ち牌再検証）を追加
-4. CLAUDE.md・README の「待ち牌は自己申告・無検証」記述を実態に合わせて更新
-- 検証: `npm test` + 手動: D15 記載の (a)(b)(c)。dictCheck OFF ルームの挙動が不変であることを必ず確認
-
-### Phase 8: 提案に留める項目の整理（実装しない）
-- D9, D10, D11 について、現状の根拠箇所と推奨対応を最終報告にまとめる。**コードは書かない**
+### Phase 6: ドキュメント整理と提案項目のまとめ（コードは最小）
+1. `README.md`「既知の課題」「遊び方」を新機能（共有URL・辞書検索・語彙拡充）に合わせて更新
+2. D-P1（満員レース）・D-P2（ID総当たり）を**提案のみ**として最終報告にまとめる。**コードは書かない**
 
 ---
 
 ## Verification Requirements
 
 - 各フェーズ後に `npm test` を実行し、**全件成功**を確認してから次へ進む
-- Phase 2 以降、UI に触れる変更をしたフェーズでは手動スモークテストを行う:
+- UI に触れたフェーズ（Phase 3/4/5）は手動スモークを行う:
   1. `cd public && python -m http.server 8080`
-  2. タブA: 名前入力→ルーム作成（辞書チェックONのまま）。タブB: ルームIDで参加
+  2. タブA: 名前入力→ルーム作成（辞書チェックONのまま）。**Phase 3 以降は「参加リンクをコピー」→ そのURLをタブBで開く → IDが事前入力されていることを確認**してから参加
   3. タブA: ゲームスタート → 引く→捨てる → タブB: ポン or パス
-  4. 変更したフローに応じて: カン / 立直宣言→ツモ・ロン / 通常あがり / 再戦
-  5. 辞書チェックが効くこと（でたらめな2文字で組確定→エラーになる）を1箇所で確認
-- ブラウザの DevTools コンソールにエラーが出ていないこと
+  4. **Phase 4 以降**: ルール→「辞書検索」タブで数語を検索（ひらがな/カタカナ/非語/XSS文字列）
+  5. **Phase 5 以降**: 辞書チェックが効くこと（でたらめな語でエラー）＋ 拡充で普通の語が通ることを確認
+- ブラウザ DevTools コンソールにエラーが出ていないこと
 - `firebase deploy` は実行しない
+
+---
 
 ## Reporting Format
 
 最終報告には以下を含めること:
 
 1. **ベースライン**: Phase 0 で記録した `git status` と `npm test` の結果
-2. **フェーズごとの結果表**: 実施した変更の要約 / 変更ファイルと行 / 実行したコマンドとその出力要点（テスト数・成否）/ 手動検証の実施項目と結果
-3. **スキップ・未完了項目**とその理由（承認待ち、Stop And Ask 該当など）
-4. **発見した新たな問題**（あれば）— 修正せず報告のみ
-5. **提案のみ項目（D8〜D11）のまとめ**: 根拠箇所・推奨対応・想定工数
-6. 最後に実行したコマンドとその結果
-
-## Out-of-scope Items（今回やらないこと）
-
-- Firebase compat SDK → modular SDK 移行（D11）
-- ES モジュール化・ビルド工程の導入・Lint/CI の導入
-- `renderGame` 全再構築方式の差分レンダリング化
-- `var`/`let`/`const` の一括統一・コードフォーマッタ適用
-- サーバー権威化、待ち牌検証、全員ポン/ロン対応（README「今後の展望」記載の機能群）
-- `firestore.rules` / `database.rules.json` の変更
-- `public/js/dictionary.js` の再生成・編集
-- ルームIDの桁数・生成方式の変更
-- ゲームルール（点数・役・閾値）の変更 — **ただし人間が明示承認した D14（七対子は7組のみ）と D15（待ち牌の辞書検証）は例外として実装する**。点数バランス（×100等）の変更はプロダクト判断であり引き続き対象外
+2. **フェーズごとの結果表**: 実施した変更の要約 / 変更ファイルと行 / 実行コマンドと出力要点（テスト数・成否）/ 手動検証の項目と結果
+3. **F2 の数値報告**: 再生成後の語数・ファイルサイズ・文字数内訳・サンプル語、閾値判定の結果
+4. **スキップ・未完了項目**とその理由（Stop And Ask 該当、JMdict 取得不可など）
+5. **発見した新たな問題**（あれば）— 修正せず報告のみ
+6. **提案のみ項目（D-P1/D-P2）のまとめ**: 根拠箇所・推奨対応・想定工数
+7. 最後に実行したコマンドとその結果
 
 ---
 
-## 実装前の確認事項と回答（記録・全問回答済み）
+## Out-of-scope Items（今回やらないこと）
 
-> 4問すべて人間が回答済み（2026-06-12）。**未回答の質問は残っていない**ため、Phase 0〜8 すべて実施できる。実装中に新たな疑義が生じた場合は Stop And Ask Conditions に従うこと。
-
-- **Q1（D8）**: `passPon` のフェーズガード追加＋自動パスタイマー多重予約の防止 → **承認**。Phase 6 で実装。
-- **Q2（D13）**: 文字数×100 は確定仕様か → **回答: 「×100 予定だが、ゲームルール的に更に良いバランスのルールがあるなら変更可能。ルールの理解しやすさも大切」**。⇒ 解釈: 現行は×100、ただし将来の再調整に開かれている。よって TODO は削除せず実態に合うコメントへ更新し、点数定数を1箇所に集約して将来の変更を一点修正にする（D13 / Phase 4）。**バランス変更そのものはこのリファクタでは行わない**（プロダクト判断）。
-- **Q3（D14）**: 2文字×5組の七対子扱いは意図されたものか → **回答: 「5組の七対子はないはずなので意図していない」**。⇒ 七対子は7組のみが正。`detectRoles` を修正する（D14 / Phase 6）。
-- **Q4（D15）**: 待ち牌の無検証は意図的仕様か → **回答: 「待ち牌設定時に辞書にその単語があるかを確認」**。⇒ 仕様変更が確定。待ち牌の辞書検証＋1文字制限を追加する（D15 / Phase 7）。
+- Firebase compat SDK → modular SDK 移行
+- ES モジュール化・ビルド工程の導入・Lint/typecheck の導入
+- `renderGame` 全再構築方式の差分レンダリング化
+- `var`/`let`/`const` の一括統一・コードフォーマッタ適用
+- サーバー権威化、待ち牌・ロンのサーバー検証、全員ポン/ロン対応
+- `firestore.rules` / `database.rules.json` / `firebase.json` の変更
+- ルームIDの桁数・生成方式の変更（D-P2）、ロビー参加のトランザクション化（D-P1）— 提案のみ
+- ゲームルール（点数・役・閾値・あがり条件）の変更
+- 辞書の前方一致/サジェスト検索や外部辞書APIの導入（F3 は完全一致判定のみ）
+- 第1期 Debt Map（D1〜D15）への再着手（すべて完了済み）

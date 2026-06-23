@@ -8,8 +8,12 @@
  *   curl -o tools/JMdict_e.gz http://ftp.edrdg.org/pub/Nihongo/JMdict_e.gz
  *   node tools/build-dictionary.mjs
  *
- * 抽出条件:
- *   - 優先度タグ付きエントリ（news1/2, ichi1/2, spec1/2, gai1/2, nfXX）= 常用語のみ
+ * 抽出条件（品質タグ除外方式）:
+ *   - 優先度タグの有無は問わない（常用語に限定しない）
+ *   - ただし次のいずれかに該当するエントリはスキップする:
+ *       a) <misc> 品質タグ = 古語/廃用/稀語/卑語/侮蔑/露骨（俗語 sl・口語 col は採用）
+ *       b) <field> 専門ドメインタグ（医学/法律/計算機 等の専門語）
+ *       c) <misc> 固有名詞系タグ（人名/地名/会社名 等。JMdict_e には基本含まれないが念のため）
  *   - 読み（かな）を片仮名→平仮名に正規化（外来語の「ー」対応）
  *   - 2〜7文字
  *   - 牌セットに存在する文字のみ（「を」「ぁぃぅぇぉ」等は牌がないので除外）
@@ -74,15 +78,28 @@ const xml = gunzipSync(readFileSync(SRC)).toString('utf8');
 
 const words = new Set();
 let entryCount = 0;
+let excludedCount = 0;
 
-// <entry>単位で処理。優先度タグ（ke_pri/re_pri）付きエントリのみ採用
+// 除外する <misc> 品質タグ（JMdict エンティティ短縮形）:
+//   arch=古語, obs/obsc=廃用・難解, rare=稀語, vulg=卑語, X=露骨, derog=侮蔑
+// 俗語(sl)・口語(col)は「日本語として認められる範囲」として採用する。
+const EXCLUDE_MISC  = /<misc>&(?:arch|obs|obsc|rare|vulg|X|derog);<\/misc>/;
+// 専門ドメインタグ（医学・法律・計算機 等）。<field> が付くエントリは専門語として除外。
+const EXCLUDE_FIELD = /<field>/;
+// 固有名詞系 <misc> タグ（人名・地名・会社名等）。JMdict_e には基本含まれないが念のため。
+const EXCLUDE_NAME  = /<misc>&(?:n-pr|place|surname|given|fam|male|fem|company|product|organization|station|work|relig|myth|char|dei|leg|obj|ev|group);<\/misc>/;
+function isExcluded(body) {
+  return EXCLUDE_MISC.test(body) || EXCLUDE_FIELD.test(body) || EXCLUDE_NAME.test(body);
+}
+
+// <entry>単位で処理。除外タグを持たないエントリの読みを採用
 const entryRe = /<entry>([\s\S]*?)<\/entry>/g;
 const rebRe   = /<reb>([^<]+)<\/reb>/g;
 let m;
 while ((m = entryRe.exec(xml)) !== null) {
   entryCount++;
   const body = m[1];
-  if (!/<(ke|re)_pri>/.test(body)) continue; // 常用語のみ
+  if (isExcluded(body)) { excludedCount++; continue; } // 古語・稀語・専門語・固有名詞は除外
   let r;
   while ((r = rebRe.exec(body)) !== null) {
     const word = kataToHira(r[1]);
@@ -91,7 +108,15 @@ while ((m = entryRe.exec(xml)) !== null) {
 }
 
 const sorted = [...words].sort((a, b) => a.localeCompare(b, 'ja'));
-console.log(`エントリ総数: ${entryCount} / 採用単語数: ${sorted.length}`);
+console.log(`エントリ総数: ${entryCount} / 除外エントリ: ${excludedCount} / 採用単語数: ${sorted.length}`);
+
+// 文字数内訳とサンプルを報告（D-F2 改善案3）
+const byLen = {};
+sorted.forEach(w => { byLen[w.length] = (byLen[w.length] || 0) + 1; });
+console.log('文字数内訳:', Object.keys(byLen).sort().map(k => `${k}字${byLen[k]}`).join(' / '));
+const sample = [];
+for (let i = 0; i < 20; i++) sample.push(sorted[Math.floor(i * sorted.length / 20)]);
+console.log('サンプル20語:', sample.join('、'));
 
 // ---- dictionary.js を出力 ----
 const header = `/**
@@ -132,5 +157,6 @@ if (typeof module !== 'undefined' && module.exports) {
 `;
 
 writeFileSync(OUT, header + body, 'utf8');
-const kb = Math.round((header.length + body.length) / 1024);
-console.log(`生成完了: ${OUT}（約${kb}KB）`);
+// 実ディスクサイズは UTF-8 バイト数（日本語は1文字3バイト）。文字数で測ると過小評価になる。
+const kb = Math.round(Buffer.byteLength(header + body, 'utf8') / 1024);
+console.log(`生成完了: ${OUT}（約${kb}KB / UTF-8実バイト）`);

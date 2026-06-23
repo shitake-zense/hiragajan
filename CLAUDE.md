@@ -50,7 +50,7 @@ Firebase SDK は `9.22.0` のCompatライブラリ（CDN経由）を使用。`db
 - `public/js/lobby.js` — ルーム作成・参加。ルームドキュメントの初期スキーマは `createRoomBtn` ハンドラと `makePlayerData()` にある
 - `public/js/game.js`（約2,050行）— ゲーム進行のすべて。ファイル冒頭コメントにセクション構成あり。レンダリングは `renderGame()` が毎スナップショットで全UIを再構築する方式
 - `public/js/utils.js`（約800行）— 牌定義（120枚）、山札、あがり判定 `validateAgari()`、役検出 `detectRoles()`、ドラ・風システム。ほぼピュア関数。末尾に `module.exports` があり Node.js/vitest からもインポートできる
-- `public/js/dictionary.js`（自動生成・約26,000語）— 辞書チェック用 `isValidWord()`。`tools/build-dictionary.mjs` が JMdict から生成する。**手で編集しない**。game.html のみが読み込む（ロビーでは不要）
+- `public/js/dictionary.js`（自動生成・約12万語）— 辞書チェック用 `isValidWord()`。`tools/build-dictionary.mjs` が JMdict から生成する。**手で編集しない**。game.html のみが読み込む（ロビーでは不要）
 - `test/utils.test.js`, `test/dictionary.test.js` — vitest によるユニットテスト（ピュア関数のみ対象）
 
 ### ゲーム状態の核心

@@ -16,6 +16,12 @@ describe('dictionary データ', () => {
     expect(bad).toEqual([]);
   });
 
+  it('全単語がひらがな（＋長音符ー）のみ', () => {
+    // 牌セットは全てひらがな＋「ー」。漢字・カタカナ・記号が混入していないこと。
+    const bad = DICTIONARY_WORDS.filter(w => !/^[ぁ-んー]+$/.test(w));
+    expect(bad).toEqual([]);
+  });
+
   it('全単語が牌セットの文字だけで構成され、枚数制約内で作れる', () => {
     const limit = {};
     BASIC_SOUNDS.forEach(c => { limit[c] = 2; });
