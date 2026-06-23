@@ -23,7 +23,8 @@
     </section>
 
     <!-- ルーム作成 -->
-    <section class="card">
+    <section class="card card-primary">
+      <span class="card-badge">作成</span>
       <h2 class="card-title">新しいルームを作る</h2>
       <p class="card-desc">ルームを作成してIDを相手に教えてください</p>
 
@@ -52,7 +53,8 @@
     </section>
 
     <!-- ルーム参加 -->
-    <section class="card">
+    <section class="card card-join">
+      <span class="card-badge card-badge-quiet">参加</span>
       <h2 class="card-title">ルームに参加する</h2>
       <p class="card-desc">相手からルームIDを教えてもらって入力してください</p>
       <input type="text" id="roomIdInput" class="input"
@@ -62,9 +64,9 @@
 
     <div id="errorMsg" class="error-msg hidden"></div>
 
-    <section class="card" style="text-align:center;">
-      <button id="lobbyRulesBtn" class="btn btn-ghost">ルール・役一覧・点数表を見る</button>
-    </section>
+    <div class="lobby-footer">
+      <button id="lobbyRulesBtn" class="btn btn-ghost">📖 ルール・役一覧・点数表を見る</button>
+    </div>
 
   </div>
 
