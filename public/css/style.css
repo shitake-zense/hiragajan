@@ -264,13 +264,14 @@ html, body {
 
 /* ── Turn indicator ── */
 .turn-indicator {
-  text-align: center; padding: 11px 16px;
-  font-size: .9rem; font-weight: 700; letter-spacing: .04em;
-  transition: background .3s;
+  text-align: center; padding: 13px 16px;
+  font-size: 1rem; font-weight: 800; letter-spacing: .04em;
+  transition: background .3s, color .3s;
 }
 .turn-indicator.my-turn {
-  background: linear-gradient(135deg, #0d3020, #152a1c);
-  color: var(--jade); border-bottom: 1px solid rgba(43,204,135,.25);
+  background: linear-gradient(135deg, #0f3a26, #16331f);
+  color: #4fe0a0; border-bottom: 1px solid rgba(43,204,135,.35);
+  text-shadow: 0 0 16px rgba(43,204,135,.4);
 }
 .turn-indicator.opponent-turn {
   background: var(--panel); color: var(--text-2); border-bottom: 1px solid var(--border);
@@ -362,10 +363,19 @@ html, body {
 .btn-sort:active { transform: scale(0.94); }
 .btn-sort-active { border-color: var(--accent); color: var(--accent-text); background: rgba(108,99,255,.12); }
 
-/* ── My area ── */
+/* ── My area (action hub — lifted above secondary info) ── */
 .my-area {
-  background: var(--panel); padding: 10px 12px;
-  padding-bottom: max(10px, env(safe-area-inset-bottom));
+  position: relative; z-index: 1;
+  background: var(--surface); padding: 12px 12px;
+  padding-bottom: max(12px, env(safe-area-inset-bottom));
+  border-top: 1px solid var(--border-2);
+  box-shadow: 0 -12px 28px rgba(0,0,0,.32);
+}
+/* subtle accent seam to signal "this is your control panel" */
+.my-area::before {
+  content: ""; position: absolute; top: -1px; left: 0; right: 0; height: 1px;
+  background: linear-gradient(90deg, transparent, var(--accent-glow) 30%, var(--accent-glow) 70%, transparent);
+  opacity: .7;
 }
 
 .word-preview {
