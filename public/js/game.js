@@ -39,6 +39,7 @@ let currentDoraTiles = {};  // { tile: multiplier } ラウンドごとに更新
 let sortMode         = false;
 let sortFirstIdx     = null;
 let autoPassTimer    = null;  // 立直者の自動パスタイマー（多重予約防止用に1つだけ保持）
+let lastCelebrateKey = null;  // お祝い演出の多重発火ガード（スナップショット毎再描画対策）
 
 let riichiState = {
   remainingHand:    [],
@@ -218,6 +219,7 @@ function renderGame(room) {
     setVisible('roundSummaryModal',  false);
     setVisible('riichiModal',        false);
     setVisible('agariModal',         false);
+    lastCelebrateKey = null;  // 再戦に備えお祝い演出のガードを解除
     // startGameBtnのdisabledをリセット（前回押されたままの場合に対応）
     const sgBtn = document.getElementById('startGameBtn');
     if (sgBtn) { sgBtn.disabled = false; sgBtn.textContent = '🎮 ゲームスタート！'; }
@@ -705,6 +707,47 @@ function renderTurnBanner(room, isMyTurn, currentTurnPlayer, isFinished) {
   }
 }
 
+/** お祝い演出：ひらがな牌が舞い落ちる紙吹雪。intensity = ピース数の目安 */
+function celebrate(intensity) {
+  const n = intensity || 40;
+  let layer = document.getElementById('celebrateLayer');
+  if (!layer) {
+    layer = document.createElement('div');
+    layer.id = 'celebrateLayer';
+    layer.className = 'celebrate-layer';
+    document.body.appendChild(layer);
+  }
+  const chars = ['あ','い','う','え','お','か','さ','た','な','ら','🀄','✨','🎉'];
+  for (let i = 0; i < n; i++) {
+    const p = document.createElement('span');
+    p.className = 'confetti-piece';
+    p.textContent = chars[Math.floor(Math.random() * chars.length)];
+    const dur = 2.2 + Math.random() * 1.8;
+    p.style.left            = Math.random() * 100 + 'vw';
+    p.style.animationDuration = dur + 's';
+    p.style.animationDelay  = Math.random() * 0.6 + 's';
+    p.style.fontSize        = (0.9 + Math.random() * 1.1) + 'rem';
+    p.style.setProperty('--spin', (Math.random() * 720 - 360) + 'deg');
+    p.style.setProperty('--drift', (Math.random() * 120 - 60) + 'px');
+    layer.appendChild(p);
+    setTimeout(() => p.remove(), (dur + 0.7) * 1000);
+  }
+}
+
+/** 数値カウントアップ。el の textContent を prefix + 0→target + suffix で約700msアニメ */
+function countUp(el, target, prefix, suffix) {
+  if (!el) return;
+  prefix = prefix || ''; suffix = suffix || '';
+  const dur = 700, start = performance.now();
+  function step(now) {
+    const t = Math.min(1, (now - start) / dur);
+    const eased = 1 - Math.pow(1 - t, 3);
+    el.textContent = prefix + Math.round(target * eased) + suffix;
+    if (t < 1) requestAnimationFrame(step);
+  }
+  requestAnimationFrame(step);
+}
+
 function renderRoundSummary(room, myData) {
   setVisible('roundSummaryModal', true);
   const round     = room.currentRound || 1;
@@ -721,6 +764,15 @@ function renderRoundSummary(room, myData) {
     winnerEl.innerHTML =
       "<div class='round-winner-label'>" + (isMe ? '🎉 あなたのあがり！' : '🎯 ' + escapeHtml(last.winnerName) + ' のあがり！') + "</div>" +
       "<div class='round-winner-score'>+" + (last.winnerScore || 0) + '点</div>';
+    const ckey = 'round-' + round;
+    if (isMe && lastCelebrateKey !== ckey) {
+      lastCelebrateKey = ckey;
+      celebrate(45);
+      countUp(winnerEl.querySelector('.round-winner-score'), last.winnerScore || 0, '+', '点');
+      winnerEl.classList.add('celebrate-pop');
+    } else if (!isMe) {
+      winnerEl.classList.remove('celebrate-pop');
+    }
   }
 
   const wordsEl = document.getElementById('roundWordsDisplay');
@@ -803,15 +855,21 @@ function renderFinish(room) {
     name: room.players[pid].name, score: totals[pid] || 0, isMe: pid === myPlayerId
   })).sort((a, b) => b.score - a.score);
 
+  const isTie = scores.length > 1 && scores[0].score === scores[1].score;
+  const iWon  = !isTie && scores[0] && scores[0].isMe;
   const resultEl = document.getElementById('resultMessage');
   if (resultEl) {
-    if (scores.length > 1 && scores[0].score === scores[1].score) {
+    if (isTie) {
       resultEl.textContent = '🤝 引き分け！'; resultEl.className = 'result-draw';
-    } else if (scores[0].isMe) {
-      resultEl.textContent = '🎉 あなたの勝ち！'; resultEl.className = 'result-win';
+    } else if (iWon) {
+      resultEl.textContent = '🎉 あなたの勝ち！'; resultEl.className = 'result-win celebrate-pop';
     } else {
       resultEl.textContent = '😢 ' + scores[0].name + 'の勝ち'; resultEl.className = 'result-lose';
     }
+  }
+  if (iWon && lastCelebrateKey !== 'finish') {
+    lastCelebrateKey = 'finish';
+    celebrate(70);
   }
 
   const listEl = document.getElementById('finalScores');
